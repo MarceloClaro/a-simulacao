@@ -8,114 +8,114 @@ from sklearn.metrics import confusion_matrix
 import pandas as pd
 
 # Define estados das células
-ALIVE = 0        # Célula viva (verde)
-BURNING1 = 1     # Célula começando a queimar (amarelo)
-BURNING2 = 2     # Célula continuando a queimar (laranja)
-BURNING3 = 3     # Célula continuando a queimar (vermelho)
-BURNING4 = 4     # Célula continuando a queimar (vermelho escuro)
-BURNED = 5       # Célula queimada (preto)
+VIVO = 0        # Célula viva (verde)
+QUEIMANDO1 = 1  # Célula começando a queimar (amarelo)
+QUEIMANDO2 = 2  # Célula continuando a queimar (laranja)
+QUEIMANDO3 = 3  # Célula continuando a queimar (vermelho)
+QUEIMANDO4 = 4  # Célula continuando a queimar (vermelho escuro)
+QUEIMADO = 5    # Célula queimada (preto)
 
 # Define as probabilidades de propagação do fogo para cada estado
-probabilities = {
-    ALIVE: 0.6,       # Probabilidade de uma célula viva pegar fogo
-    BURNING1: 0.8,    # Probabilidade de uma célula queimando continuar queimando
-    BURNING2: 0.8,    # Continuação da queima
-    BURNING3: 0.8,    # Continuação da queima
-    BURNING4: 0.8,    # Continuação da queima
-    BURNED: 0         # Uma célula queimada não pode pegar fogo novamente
+probabilidades = {
+    VIVO: 0.6,       # Probabilidade de uma célula viva pegar fogo
+    QUEIMANDO1: 0.8, # Probabilidade de uma célula queimando continuar queimando
+    QUEIMANDO2: 0.8, # Continuação da queima
+    QUEIMANDO3: 0.8, # Continuação da queima
+    QUEIMANDO4: 0.8, # Continuação da queima
+    QUEIMADO: 0      # Uma célula queimada não pode pegar fogo novamente
 }
 
 # Atribui valores numéricos ao tipo de vegetação
-vegetation_type_values = {
+valores_tipo_vegetacao = {
     'pastagem': 0.5,
     'matagal': 0.75,
     'floresta': 1.0
 }
 
 # Inicializa a matriz do autômato celular
-def initialize_grid(size, fire_start):
-    grid = np.zeros((size, size), dtype=int)  # Cria uma matriz de zeros (células vivas)
-    grid[fire_start] = BURNING1  # Define a célula inicial como queimando
-    return grid
+def inicializar_grade(tamanho, inicio_fogo):
+    grade = np.zeros((tamanho, tamanho), dtype=int)  # Cria uma matriz de zeros (células vivas)
+    grade[inicio_fogo] = QUEIMANDO1  # Define a célula inicial como queimando
+    return grade
 
 # Função para calcular a probabilidade de propagação com base nos parâmetros
-def calculate_spread_probability(params):
-    temp_factor = (params['temperature'] - 20) / 30
-    humidity_factor = (100 - params['humidity']) / 100
-    wind_speed_factor = params['wind_speed'] / 50
-    vegetation_density_factor = params['vegetation_density'] / 100
-    fuel_moisture_factor = (100 - params['fuel_moisture']) / 100
-    topography_factor = params['topography'] / 45
-    ndvi_factor = params['ndvi']
-    fire_intensity_factor = params['fire_intensity'] / 10000
-    human_intervention_factor = 1 - params['human_intervention']
-    vegetation_type_factor = vegetation_type_values[params['vegetation_type']]
+def calcular_probabilidade_propagacao(params):
+    fator_temp = (params['temperatura'] - 20) / 30
+    fator_umidade = (100 - params['umidade']) / 100
+    fator_velocidade_vento = params['velocidade_vento'] / 50
+    fator_densidade_vegetacao = params['densidade_vegetacao'] / 100
+    fator_umidade_combustivel = (100 - params['umidade_combustivel']) / 100
+    fator_topografia = params['topografia'] / 45
+    fator_ndvi = params['ndvi']
+    fator_intensidade_fogo = params['intensidade_fogo'] / 10000
+    fator_intervencao_humana = 1 - params['intervencao_humana']
+    fator_tipo_vegetacao = valores_tipo_vegetacao[params['tipo_vegetacao']]
 
-    base_prob = 0.3
-    prob = base_prob + 0.1 * (temp_factor + humidity_factor + wind_speed_factor + vegetation_density_factor +
-                              fuel_moisture_factor + topography_factor + ndvi_factor + fire_intensity_factor +
-                              vegetation_type_factor) * human_intervention_factor
+    prob_base = 0.3
+    prob = prob_base + 0.1 * (fator_temp + fator_umidade + fator_velocidade_vento + fator_densidade_vegetacao +
+                              fator_umidade_combustivel + fator_topografia + fator_ndvi + fator_intensidade_fogo +
+                              fator_tipo_vegetacao) * fator_intervencao_humana
 
     return min(max(prob, 0), 1)
 
 # Aplica a regra do autômato celular
-def apply_fire_rules(grid, params, noise):
-    new_grid = grid.copy()  # Cria uma cópia da matriz para atualizar os estados
-    size = grid.shape[0]  # Obtém o tamanho da matriz
-    spread_prob = calculate_spread_probability(params)
+def aplicar_regras_fogo(grade, params, ruido):
+    nova_grade = grade.copy()  # Cria uma cópia da matriz para atualizar os estados
+    tamanho = grade.shape[0]  # Obtém o tamanho da matriz
+    prob_propagacao = calcular_probabilidade_propagacao(params)
 
-    for i in range(1, size - 1):  # Percorre cada célula (ignorando bordas)
-        for j in range(1, size - 1):
-            if grid[i, j] == BURNING1:
-                new_grid[i, j] = BURNING2  # Atualiza célula para o próximo estado de queima
-            elif grid[i, j] == BURNING2:
-                new_grid[i, j] = BURNING3
-            elif grid[i, j] == BURNING3:
-                new_grid[i, j] = BURNING4
-            elif grid[i, j] == BURNING4:
-                new_grid[i, j] = BURNED
+    for i in range(1, tamanho - 1):  # Percorre cada célula (ignorando bordas)
+        for j in range(1, tamanho - 1):
+            if grade[i, j] == QUEIMANDO1:
+                nova_grade[i, j] = QUEIMANDO2  # Atualiza célula para o próximo estado de queima
+            elif grade[i, j] == QUEIMANDO2:
+                nova_grade[i, j] = QUEIMANDO3
+            elif grade[i, j] == QUEIMANDO3:
+                nova_grade[i, j] = QUEIMANDO4
+            elif grade[i, j] == QUEIMANDO4:
+                nova_grade[i, j] = QUEIMADO
                 # Propaga o fogo para células adjacentes com base na probabilidade e efeito do vento
-                if grid[i-1, j] == ALIVE and np.random.rand() < spread_prob * wind_effect(params['wind_direction'], (i-1, j), (i, j)) * noise_effect(noise):
-                    new_grid[i-1, j] = BURNING1
-                if grid[i+1, j] == ALIVE and np.random.rand() < spread_prob * wind_effect(params['wind_direction'], (i+1, j), (i, j)) * noise_effect(noise):
-                    new_grid[i+1, j] = BURNING1
-                if grid[i, j-1] == ALIVE and np.random.rand() < spread_prob * wind_effect(params['wind_direction'], (i, j-1), (i, j)) * noise_effect(noise):
-                    new_grid[i, j-1] = BURNING1
-                if grid[i, j+1] == ALIVE and np.random.rand() < spread_prob * wind_effect(params['wind_direction'], (i, j+1), (i, j)) * noise_effect(noise):
-                    new_grid[i, j+1] = BURNING1
-    return new_grid
+                if grade[i-1, j] == VIVO and np.random.rand() < prob_propagacao * efeito_vento(params['direcao_vento'], (i-1, j), (i, j)) * efeito_ruido(ruido):
+                    nova_grade[i-1, j] = QUEIMANDO1
+                if grade[i+1, j] == VIVO and np.random.rand() < prob_propagacao * efeito_vento(params['direcao_vento'], (i+1, j), (i, j)) * efeito_ruido(ruido):
+                    nova_grade[i+1, j] = QUEIMANDO1
+                if grade[i, j-1] == VIVO and np.random.rand() < prob_propagacao * efeito_vento(params['direcao_vento'], (i, j-1), (i, j)) * efeito_ruido(ruido):
+                    nova_grade[i, j-1] = QUEIMANDO1
+                if grade[i, j+1] == VIVO and np.random.rand() < prob_propagacao * efeito_vento(params['direcao_vento'], (i, j+1), (i, j)) * efeito_ruido(ruido):
+                    nova_grade[i, j+1] = QUEIMANDO1
+    return nova_grade
 
 # Função para modelar o efeito do vento
-def wind_effect(wind_direction, cell, source):
-    wind_angle_rad = np.deg2rad(wind_direction)
-    wind_vector = np.array([np.cos(wind_angle_rad), np.sin(wind_angle_rad)])
+def efeito_vento(direcao_vento, celula, origem):
+    angulo_vento_rad = np.deg2rad(direcao_vento)
+    vetor_vento = np.array([np.cos(angulo_vento_rad), np.sin(angulo_vento_rad)])
     
-    direction_vector = np.array([cell[0] - source[0], cell[1] - source[1]])
-    direction_vector = direction_vector / np.linalg.norm(direction_vector)
+    vetor_direcao = np.array([celula[0] - origem[0], celula[1] - origem[1]])
+    vetor_direcao = vetor_direcao / np.linalg.norm(vetor_direcao)
     
-    effect = np.dot(wind_vector, direction_vector)
-    effect = (effect + 1) / 2  # Normaliza para um valor entre 0 e 1
+    efeito = np.dot(vetor_vento, vetor_direcao)
+    efeito = (efeito + 1) / 2  # Normaliza para um valor entre 0 e 1
     
-    return effect
+    return efeito
 
 # Função para modelar o efeito do ruído
-def noise_effect(noise):
-    return 1 + (np.random.rand() - 0.5) * (noise / 50.0)
+def efeito_ruido(ruido):
+    return 1 + (np.random.rand() - 0.5) * (ruido / 50.0)
 
 # Função para executar a simulação
-def run_simulation(size, steps, fire_start, params, noise):
-    grid = initialize_grid(size, fire_start)  # Inicializa a matriz do autômato celular
-    grids = [grid.copy()]  # Cria uma lista para armazenar os estados em cada passo
+def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido):
+    grade = inicializar_grade(tamanho, inicio_fogo)  # Inicializa a matriz do autômato celular
+    grades = [grade.copy()]  # Cria uma lista para armazenar os estados em cada passo
 
-    for _ in range(steps):  # Executa a simulação para o número de passos definido
-        grid = apply_fire_rules(grid, params, noise)  # Aplica as regras do autômato
-        grids.append(grid.copy())  # Armazena a matriz atualizada na lista
+    for _ in range(passos):  # Executa a simulação para o número de passos definido
+        grade = aplicar_regras_fogo(grade, params, ruido)  # Aplica as regras do autômato
+        grades.append(grade.copy())  # Armazena a matriz atualizada na lista
 
-    return grids
+    return grades
 
 # Função para plotar a simulação
-def plot_simulation(simulation, fire_start, wind_direction):
-    num_plots = min(50, len(simulation))  # Define o número máximo de gráficos a serem plotados
+def plotar_simulacao(simulacao, inicio_fogo, direcao_vento):
+    num_plots = min(50, len(simulacao))  # Define o número máximo de gráficos a serem plotados
     fig, axes = plt.subplots(5, 10, figsize=(20, 10))  # Cria um grid de subplots (5 linhas, 10 colunas)
     axes = axes.flatten()  # Achata a matriz de eixos para fácil iteração
 
@@ -123,23 +123,23 @@ def plot_simulation(simulation, fire_start, wind_direction):
     cmap = ListedColormap(['green', 'yellow', 'orange', 'red', 'darkred', 'black'])
 
     # Itera sobre os estados da simulação para plotar cada um
-    for i, grid in enumerate(simulation[::max(1, len(simulation)//num_plots)]):
+    for i, grade in enumerate(simulacao[::max(1, len(simulacao)//num_plots)]):
         if i >= len(axes):  # Verifica se o número máximo de gráficos foi atingido
             break
         ax = axes[i]
-        ax.imshow(grid, cmap=cmap, interpolation='nearest')  # Plota a matriz atual com o mapa de cores
-        ax.set_title(f'Passo {i * (len(simulation)//num_plots)}')  # Define o título do subplot com o passo da simulação
+        ax.imshow(grade, cmap=cmap, interpolation='nearest')  # Plota a matriz atual com o mapa de cores
+        ax.set_title(f'Passo {i * (len(simulacao)//num_plots)}')  # Define o título do subplot com o passo da simulação
 
         # Marca o quadrinho inicial com um quadrado vermelho
         if i == 0:
-            ax.plot(fire_start[1], fire_start[0], 'rs', markersize=5, label='Fogo Inicial')
+            ax.plot(inicio_fogo[1], inicio_fogo[0], 'rs', markersize=5, label='Fogo Inicial')
             ax.legend(loc='upper right')
 
         # Desenha uma seta para indicar a direção do vento com texto
         if i == len(axes) - 1:  # Último gráfico
-            ax.arrow(90, 90, 10 * np.cos(np.deg2rad(wind_direction)), 10 * np.sin(np.deg2rad(wind_direction)),
+            ax.arrow(90, 90, 10 * np.cos(np.deg2rad(direcao_vento)), 10 * np.sin(np.deg2rad(direcao_vento)),
                      head_width=5, head_length=5, fc='blue', ec='blue')
-            ax.text(80, 95, f'Vento {wind_direction}°', color='blue', fontsize=12)
+            ax.text(80, 95, f'Vento {direcao_vento}°', color='blue', fontsize=12)
 
         ax.grid(True)  # Exibe a malha cartesiana
 
@@ -152,23 +152,23 @@ def plot_simulation(simulation, fire_start, wind_direction):
     st.pyplot(fig)
 
 # Função para plotar histogramas e gráficos de margem de erro
-def plot_histograms_and_errors(simulation):
-    burn_counts = [np.sum(grid == BURNING1) + np.sum(grid == BURNING2) + np.sum(grid == BURNING3) + np.sum(grid == BURNING4) for grid in simulation]
-    burn_counts_df = pd.DataFrame(burn_counts, columns=["Burning Cells"])
+def plotar_histogramas_e_erros(simulacao):
+    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
+    contagem_queimando_df = pd.DataFrame(contagem_queimando, columns=["Células Queimando"])
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     
     # Histograma
-    sns.histplot(burn_counts_df, x="Burning Cells", ax=ax[0], kde=True, bins=20, color='orange')
+    sns.histplot(contagem_queimando_df, x="Células Queimando", ax=ax[0], kde=True, bins=20, color='orange')
     ax[0].set_title('Histograma de Células Queimando')
     ax[0].set_xlabel('Número de Células Queimando')
     ax[0].set_ylabel('Frequência')
     
     # Gráfico de média e margem de erro
-    rolling_mean = burn_counts_df.rolling(window=10).mean()
-    rolling_std = burn_counts_df.rolling(window=10).std()
-    ax[1].plot(rolling_mean, label='Média', color='blue')
-    ax[1].fill_between(rolling_std.index, rolling_mean["Burning Cells"] - rolling_std["Burning Cells"], rolling_mean["Burning Cells"] + rolling_std["Burning Cells"], color='blue', alpha=0.2, label='Margem de Erro (1 std)')
+    media_movel = contagem_queimando_df.rolling(window=10).mean()
+    std_movel = contagem_queimando_df.rolling(window=10).std()
+    ax[1].plot(media_movel, label='Média', color='blue')
+    ax[1].fill_between(std_movel.index, media_movel["Células Queimando"] - std_movel["Células Queimando"], media_movel["Células Queimando"] + std_movel["Células Queimando"], color='blue', alpha=0.2, label='Margem de Erro (1 std)')
     ax[1].set_title('Média e Margem de Erro')
     ax[1].set_xlabel('Passos da Simulação')
     ax[1].set_ylabel('Número de Células Queimando')
@@ -178,43 +178,60 @@ def plot_histograms_and_errors(simulation):
     st.pyplot(fig)
 
 # Função para calcular correlações e realizar ANOVA, Q-Exponential e matriz de confusão
-def perform_advanced_statistics(simulation, params):
-    burn_counts = [np.sum(grid == BURNING1) + np.sum(grid == BURNING2) + np.sum(grid == BURNING3) + np.sum(grid == BURNING4) for grid in simulation]
-    burn_counts_df = pd.DataFrame(burn_counts, columns=["Burning Cells"])
+def realizar_estatisticas_avancadas(simulacao, params):
+    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
+    contagem_queimando_df = pd.DataFrame(contagem_queimando, columns=["Células Queimando"])
 
     # Adiciona os parâmetros à análise
-    param_values = pd.DataFrame([params] * len(burn_counts_df))
-    param_values['Burning Cells'] = burn_counts_df['Burning Cells']
+    valores_params = pd.DataFrame([{
+        'temperatura': params['temperatura'],
+        'umidade': params['umidade'],
+        'velocidade_vento': params['velocidade_vento'],
+        'direcao_vento': params['direcao_vento'],
+        'precipitacao': params['precipitacao'],
+        'radiacao_solar': params['radiacao_solar'],
+        'densidade_vegetacao': params['densidade_vegetacao'],
+        'umidade_combustivel': params['umidade_combustivel'],
+        'topografia': params['topografia'],
+        'tipo_solo': valores_tipo_vegetacao[params['tipo_vegetacao']],
+        'ndvi': params['ndvi'],
+        'intensidade_fogo': params['intensidade_fogo'],
+        'tempo_desde_ultimo_fogo': params['tempo_desde_ultimo_fogo'],
+        'intervencao_humana': params['intervencao_humana'],
+        'ruido': params['ruido']
+    }] * len(contagem_queimando_df))
+    
+    valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
 
     # Correlação de Spearman
-    spearman_corr = param_values.corr(method='spearman')
+    correlacao_spearman = valores_params.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
-    st.write(spearman_corr)
+    st.write(correlacao_spearman)
 
     # ANOVA
-    thirds = np.array_split(burn_counts_df["Burning Cells"], 3)
-    f_val, p_val = stats.f_oneway(thirds[0], thirds[1], thirds[2])
+    tercios = np.array_split(contagem_queimando_df["Células Queimando"], 3)
+    f_val, p_val = stats.f_oneway(tercios[0], tercios[1], tercios[2])
     st.write("### Resultado da ANOVA:")
     st.write(f"F-valor: {f_val}, p-valor: {p_val}")
 
     # Q-Exponential
-    def q_exponential(values, q):
-        return (1 - (1 - q) * values)**(1 / (1 - q))
+    def q_exponencial(valores, q):
+        return (1 - (1 - q) * valores)**(1 / (1 - q))
 
-    q_value = 1.5  # Exemplo de valor de q
-    q_exponential_values = q_exponential(burn_counts_df["Burning Cells"], q_value)
-    st.write("### Valores Q-Exponential:")
-    st.write(q_exponential_values)
+    q_valor = 1.5  # Exemplo de valor de q
+    valores_q_exponencial = q_exponencial(contagem_queimando_df["Células Queimando"], q_valor)
+    st.write("### Valores Q-Exponencial:")
+    st.write(valores_q_exponencial)
 
     # Matriz de Confusão
-    y_true = np.concatenate([grid.flatten() for grid in simulation[:-1]])
-    y_pred = np.concatenate([grid.flatten() for grid in simulation[1:]])
-    conf_matrix = confusion_matrix(y_true, y_pred, labels=[ALIVE, BURNING1, BURNING2, BURNING3, BURNING4, BURNED])
+    y_true = np.concatenate([grade.flatten() for grade in simulacao[:-1]])
+    y_pred = np.concatenate([grade.flatten() for grade in simulacao[1:]])
+    matriz_confusao = confusion_matrix(y_true, y_pred, labels=[VIVO, QUEIMANDO1, QUEIMANDO2, QUEIMANDO3, QUEIMANDO4, QUEIMADO])
     st.write("### Matriz de Confusão:")
-    st.write(conf_matrix)
+    st.write(matriz_confusao)
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=['ALIVE', 'BURNING1', 'BURNING2', 'BURNING3', 'BURNING4', 'BURNED'], yticklabels=['ALIVE', 'BURNING1', 'BURNING2', 'BURNING3', 'BURNING4', 'BURNED'])
+    sns.heatmap(matriz_confusao, annot=True, fmt='d', cmap='Blues', xticklabels=['Vivo', 'Queimando1', 'Queimando2', 'Queimando3', 'Queimando4', 'Queimado'], yticklabels=['Vivo', 'Queimando1', 'Queimando2', 'Queimando3', 'Queimando4', 'Queimado'])
     ax.set_xlabel('Estado Previsto')
     ax.set_ylabel('Estado Real')
     ax.set_title('Matriz de Confusão')
@@ -313,35 +330,35 @@ def main():
 
     # Definir parâmetros
     params = {
-        'temperature': st.sidebar.slider('Temperatura (°C)', 0, 50, 30),
-        'humidity': st.sidebar.slider('Umidade relativa (%)', 0, 100, 40),
-        'wind_speed': st.sidebar.slider('Velocidade do Vento (km/h)', 0, 100, 20),
-        'wind_direction': st.sidebar.slider('Direção do Vento (graus)', 0, 360, 90),
-        'precipitation': st.sidebar.slider('Precipitação (mm/dia)', 0, 200, 0),
-        'solar_radiation': st.sidebar.slider('Radiação Solar (W/m²)', 0, 1200, 800),
-        'vegetation_type': st.sidebar.selectbox('Tipo de vegetação', ['pastagem', 'matagal', 'floresta']),
-        'vegetation_density': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
-        'fuel_moisture': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
-        'topography': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
-        'soil_type': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso', 'argiloso']),
+        'temperatura': st.sidebar.slider('Temperatura (°C)', 0, 50, 30),
+        'umidade': st.sidebar.slider('Umidade relativa (%)', 0, 100, 40),
+        'velocidade_vento': st.sidebar.slider('Velocidade do Vento (km/h)', 0, 100, 20),
+        'direcao_vento': st.sidebar.slider('Direção do Vento (graus)', 0, 360, 90),
+        'precipitacao': st.sidebar.slider('Precipitação (mm/dia)', 0, 200, 0),
+        'radiacao_solar': st.sidebar.slider('Radiação Solar (W/m²)', 0, 1200, 800),
+        'tipo_vegetacao': st.sidebar.selectbox('Tipo de vegetação', ['pastagem', 'matagal', 'floresta']),
+        'densidade_vegetacao': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
+        'umidade_combustivel': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
+        'topografia': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
+        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso', 'argiloso']),
         'ndvi': st.sidebar.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
-        'fire_intensity': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
-        'time_since_last_fire': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
-        'human_intervention': st.sidebar.slider('Fator de Intervenção Humana (escala 0-1)', 0.0, 1.0, 0.2),
-        'noise': st.sidebar.slider('Ruído (%)', 1, 100, 10)
+        'intensidade_fogo': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
+        'tempo_desde_ultimo_fogo': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
+        'intervencao_humana': st.sidebar.slider('Fator de Intervenção Humana (escala 0-1)', 0.0, 1.0, 0.2),
+        'ruido': st.sidebar.slider('Ruído (%)', 1, 100, 10)
     }
 
     # Tamanho da grade e número de passos
-    grid_size = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
-    num_steps = st.sidebar.slider('Número de passos', 10, 200, 100)
+    tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
+    num_passos = st.sidebar.slider('Número de passos', 10, 200, 100)
 
     if st.button('Executar Simulação'):
-        fire_start = (grid_size // 2, grid_size // 2)
-        noise = params['noise']
-        simulation = run_simulation(grid_size, num_steps, fire_start, params, noise)
-        plot_simulation(simulation, fire_start, params['wind_direction'])
-        plot_histograms_and_errors(simulation)
-        perform_advanced_statistics(simulation, params)
+        inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
+        ruido = params['ruido']
+        simulacao = executar_simulacao(tamanho_grade, num_passos, inicio_fogo, params, ruido)
+        plotar_simulacao(simulacao, inicio_fogo, params['direcao_vento'])
+        plotar_histogramas_e_erros(simulacao)
+        realizar_estatisticas_avancadas(simulacao, params)
 
 if __name__ == "__main__":
     main()
