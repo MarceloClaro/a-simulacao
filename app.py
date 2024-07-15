@@ -211,6 +211,18 @@ def realizar_estatisticas_avancadas(simulacao, params):
     
     valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
 
+    # Entrada de dados do usuário para os últimos 10 registros
+    st.sidebar.markdown("### Inserir Dados dos Últimos 10 Registros")
+    periodo = st.sidebar.selectbox("Período dos Registros", ["Anos", "Meses", "Semanas", "Dias"])
+    adicionar_dados = st.sidebar.checkbox("Adicionar Dados Manuais")
+
+    if adicionar_dados:
+        for i in range(10):
+            st.sidebar.markdown(f"#### Registro {i + 1}")
+            for param in params.keys():
+                if isinstance(params[param], (int, float)):
+                    valores_params.at[i, param] = st.sidebar.number_input(f"{param.capitalize()} (Registro {i + 1})", value=params[param])
+
     # Correlação de Spearman
     correlacao_spearman = valores_params.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
