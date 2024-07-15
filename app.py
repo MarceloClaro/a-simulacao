@@ -16,14 +16,23 @@ class FirePropagationSimulator:
         center = self.grid_size // 2
         self.grid[center, center] = 1
         
-    def calculate_spread_probability(self, i, j):
+    def calculate_spread_probability(self, i, j, ni, nj):
         base_prob = 0.3
         temp_factor = (self.params['temperature'] - 20) / 40  # Efeito de temperatura normalizado
         humidity_factor = (100 - self.params['humidity']) / 100
         wind_factor = self.params['wind_speed'] / 50
+        
+        # Calcula a direção do vento em radianos
+        wind_direction_radians = np.deg2rad(self.params['wind_direction'])
+        wind_i = np.sin(wind_direction_radians)
+        wind_j = np.cos(wind_direction_radians)
+        
+        # Direção do vento afetando a probabilidade de propagação
+        direction_factor = (ni - i) * wind_i + (nj - j) * wind_j
+        
         vegetation_factor = self.params['vegetation_density'] / 100
         ndvi_factor = self.params['ndvi']
-        prob = base_prob + 0.1 * (temp_factor + humidity_factor + wind_factor + vegetation_factor + ndvi_factor)
+        prob = base_prob + 0.1 * (temp_factor + humidity_factor + wind_factor + vegetation_factor + ndvi_factor + direction_factor)
         return min(max(prob, 0), 1)
     
     def update_cell(self, i, j):
@@ -34,7 +43,7 @@ class FirePropagationSimulator:
             for ni, nj in neighbors:
                 if 0 <= ni < self.grid_size and 0 <= nj < self.grid_size:
                     if self.grid[ni, nj] == 1:  # Se o vizinho estiver queimando
-                        if random.random() < self.calculate_spread_probability(i, j):
+                        if random.random() < self.calculate_spread_probability(i, j, ni, nj):
                             self.grid[i, j] = 1  # Coloca fogo na célula
                             break
     
@@ -68,6 +77,12 @@ class FirePropagationSimulator:
         
         plt.tight_layout()
         st.pyplot(fig)
+
+        # Legenda
+        st.write("### Legenda")
+        st.markdown("<span style='color: green;'>🟩 Vegetação não queimada</span>", unsafe_allow_html=True)
+        st.markdown("<span style='color: red;'>🟥 Fogo ativo</span>", unsafe_allow_html=True)
+        st.markdown("<span style='color: black;'>⬛ Área queimada</span>", unsafe_allow_html=True)
 
 # Interface do Streamlit
 st.title("EcoSim.ai - Simulador de Propagação de Incêndio em Autômatos Celulares")
