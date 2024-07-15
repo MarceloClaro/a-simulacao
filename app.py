@@ -415,8 +415,10 @@ def main():
         
         if not df_historico_manual.empty:
             realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
-        else:
+        elif df_historico_csv is not None:
             realizar_estatisticas_avancadas(simulacao, params, df_historico_csv)
+        else:
+            realizar_estatisticas_avancadas(simulacao, params, None)
 
         # Salvar parâmetros atuais no CSV
         df_novos_parametros = pd.DataFrame([params])
