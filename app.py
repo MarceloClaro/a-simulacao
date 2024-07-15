@@ -31,10 +31,29 @@ def initialize_grid(size, fire_start):
     grid[fire_start] = BURNING1  # Define a célula inicial como queimando
     return grid
 
+# Função para calcular a probabilidade de propagação com base nos parâmetros
+def calculate_spread_probability(params):
+    temp_factor = (params['temperature'] - 20) / 30
+    humidity_factor = (100 - params['humidity']) / 100
+    wind_speed_factor = params['wind_speed'] / 50
+    vegetation_density_factor = params['vegetation_density'] / 100
+    fuel_moisture_factor = (100 - params['fuel_moisture']) / 100
+    topography_factor = params['topography'] / 45
+    ndvi_factor = params['ndvi']
+    fire_intensity_factor = params['fire_intensity'] / 10000
+    human_intervention_factor = 1 - params['human_intervention']
+
+    base_prob = 0.3
+    prob = base_prob + 0.1 * (temp_factor + humidity_factor + wind_speed_factor + vegetation_density_factor +
+                              fuel_moisture_factor + topography_factor + ndvi_factor + fire_intensity_factor) * human_intervention_factor
+
+    return min(max(prob, 0), 1)
+
 # Aplica a regra do autômato celular
-def apply_fire_rules(grid, wind_direction, noise):
+def apply_fire_rules(grid, params, noise):
     new_grid = grid.copy()  # Cria uma cópia da matriz para atualizar os estados
     size = grid.shape[0]  # Obtém o tamanho da matriz
+    spread_prob = calculate_spread_probability(params)
 
     for i in range(1, size - 1):  # Percorre cada célula (ignorando bordas)
         for j in range(1, size - 1):
@@ -47,13 +66,13 @@ def apply_fire_rules(grid, wind_direction, noise):
             elif grid[i, j] == BURNING4:
                 new_grid[i, j] = BURNED
                 # Propaga o fogo para células adjacentes com base na probabilidade e efeito do vento
-                if grid[i-1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i-1, j), (i, j)) * noise_effect(noise):
+                if grid[i-1, j] == ALIVE and np.random.rand() < spread_prob * wind_effect(params['wind_direction'], (i-1, j), (i, j)) * noise_effect(noise):
                     new_grid[i-1, j] = BURNING1
-                if grid[i+1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i+1, j), (i, j)) * noise_effect(noise):
+                if grid[i+1, j] == ALIVE and np.random.rand() < spread_prob * wind_effect(params['wind_direction'], (i+1, j), (i, j)) * noise_effect(noise):
                     new_grid[i+1, j] = BURNING1
-                if grid[i, j-1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i, j-1), (i, j)) * noise_effect(noise):
+                if grid[i, j-1] == ALIVE and np.random.rand() < spread_prob * wind_effect(params['wind_direction'], (i, j-1), (i, j)) * noise_effect(noise):
                     new_grid[i, j-1] = BURNING1
-                if grid[i, j+1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i, j+1), (i, j)) * noise_effect(noise):
+                if grid[i, j+1] == ALIVE and np.random.rand() < spread_prob * wind_effect(params['wind_direction'], (i, j+1), (i, j)) * noise_effect(noise):
                     new_grid[i, j+1] = BURNING1
     return new_grid
 
@@ -75,12 +94,12 @@ def noise_effect(noise):
     return 1 + (np.random.rand() - 0.5) * (noise / 50.0)
 
 # Função para executar a simulação
-def run_simulation(size, steps, fire_start, wind_direction, noise):
+def run_simulation(size, steps, fire_start, params, noise):
     grid = initialize_grid(size, fire_start)  # Inicializa a matriz do autômato celular
     grids = [grid.copy()]  # Cria uma lista para armazenar os estados em cada passo
 
     for _ in range(steps):  # Executa a simulação para o número de passos definido
-        grid = apply_fire_rules(grid, wind_direction, noise)  # Aplica as regras do autômato
+        grid = apply_fire_rules(grid, params, noise)  # Aplica as regras do autômato
         grids.append(grid.copy())  # Armazena a matriz atualizada na lista
 
     return grids
@@ -149,7 +168,7 @@ def plot_histograms_and_errors(simulation):
     plt.tight_layout()
     st.pyplot(fig)
 
-# Função para calcular correlações e realizar ANOVA, Q-Statistics, Q-Exponential e matriz de confusão
+# Função para calcular correlações e realizar ANOVA, Q-Exponential e matriz de confusão
 def perform_advanced_statistics(simulation, params):
     burn_counts = [np.sum(grid == BURNING1) + np.sum(grid == BURNING2) + np.sum(grid == BURNING3) + np.sum(grid == BURNING4) for grid in simulation]
     burn_counts_df = pd.DataFrame(burn_counts, columns=["Burning Cells"])
@@ -305,10 +324,9 @@ def main():
 
     if st.button('Executar Simulação'):
         fire_start = (grid_size // 2, grid_size // 2)
-        wind_direction = params['wind_direction']
         noise = params['noise']
-        simulation = run_simulation(grid_size, num_steps, fire_start, wind_direction, noise)
-        plot_simulation(simulation, fire_start, wind_direction)
+        simulation = run_simulation(grid_size, num_steps, fire_start, params, noise)
+        plot_simulation(simulation, fire_start, params['wind_direction'])
         plot_histograms_and_errors(simulation)
         perform_advanced_statistics(simulation, params)
 
