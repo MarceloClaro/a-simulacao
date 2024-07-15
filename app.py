@@ -25,6 +25,13 @@ probabilities = {
     BURNED: 0         # Uma célula queimada não pode pegar fogo novamente
 }
 
+# Atribui valores numéricos ao tipo de vegetação
+vegetation_type_values = {
+    'pastagem': 0.5,
+    'matagal': 0.75,
+    'floresta': 1.0
+}
+
 # Inicializa a matriz do autômato celular
 def initialize_grid(size, fire_start):
     grid = np.zeros((size, size), dtype=int)  # Cria uma matriz de zeros (células vivas)
@@ -42,10 +49,12 @@ def calculate_spread_probability(params):
     ndvi_factor = params['ndvi']
     fire_intensity_factor = params['fire_intensity'] / 10000
     human_intervention_factor = 1 - params['human_intervention']
+    vegetation_type_factor = vegetation_type_values[params['vegetation_type']]
 
     base_prob = 0.3
     prob = base_prob + 0.1 * (temp_factor + humidity_factor + wind_speed_factor + vegetation_density_factor +
-                              fuel_moisture_factor + topography_factor + ndvi_factor + fire_intensity_factor) * human_intervention_factor
+                              fuel_moisture_factor + topography_factor + ndvi_factor + fire_intensity_factor +
+                              vegetation_type_factor) * human_intervention_factor
 
     return min(max(prob, 0), 1)
 
@@ -173,8 +182,12 @@ def perform_advanced_statistics(simulation, params):
     burn_counts = [np.sum(grid == BURNING1) + np.sum(grid == BURNING2) + np.sum(grid == BURNING3) + np.sum(grid == BURNING4) for grid in simulation]
     burn_counts_df = pd.DataFrame(burn_counts, columns=["Burning Cells"])
 
+    # Adiciona os parâmetros à análise
+    param_values = pd.DataFrame([params] * len(burn_counts_df))
+    param_values['Burning Cells'] = burn_counts_df['Burning Cells']
+
     # Correlação de Spearman
-    spearman_corr = burn_counts_df.corr(method='spearman')
+    spearman_corr = param_values.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
     st.write(spearman_corr)
 
