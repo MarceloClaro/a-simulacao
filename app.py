@@ -28,7 +28,7 @@ def initialize_grid(size, fire_start):
     return grid
 
 # Aplica a regra do autômato celular
-def apply_fire_rules(grid, wind_direction):
+def apply_fire_rules(grid, wind_direction, noise):
     new_grid = grid.copy()  # Cria uma cópia da matriz para atualizar os estados
     size = grid.shape[0]  # Obtém o tamanho da matriz
 
@@ -43,13 +43,13 @@ def apply_fire_rules(grid, wind_direction):
             elif grid[i, j] == BURNING4:
                 new_grid[i, j] = BURNED
                 # Propaga o fogo para células adjacentes com base na probabilidade e efeito do vento
-                if grid[i-1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i-1, j), (i, j)):
+                if grid[i-1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i-1, j), (i, j)) * noise_effect(noise):
                     new_grid[i-1, j] = BURNING1
-                if grid[i+1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i+1, j), (i, j)):
+                if grid[i+1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i+1, j), (i, j)) * noise_effect(noise):
                     new_grid[i+1, j] = BURNING1
-                if grid[i, j-1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i, j-1), (i, j)):
+                if grid[i, j-1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i, j-1), (i, j)) * noise_effect(noise):
                     new_grid[i, j-1] = BURNING1
-                if grid[i, j+1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i, j+1), (i, j)):
+                if grid[i, j+1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i, j+1), (i, j)) * noise_effect(noise):
                     new_grid[i, j+1] = BURNING1
     return new_grid
 
@@ -66,13 +66,17 @@ def wind_effect(wind_direction, cell, source):
     
     return effect
 
+# Função para modelar o efeito do ruído
+def noise_effect(noise):
+    return 1 + (np.random.rand() - 0.5) * (noise / 50.0)
+
 # Função para executar a simulação
-def run_simulation(size, steps, fire_start, wind_direction):
+def run_simulation(size, steps, fire_start, wind_direction, noise):
     grid = initialize_grid(size, fire_start)  # Inicializa a matriz do autômato celular
     grids = [grid.copy()]  # Cria uma lista para armazenar os estados em cada passo
 
     for _ in range(steps):  # Executa a simulação para o número de passos definido
-        grid = apply_fire_rules(grid, wind_direction)  # Aplica as regras do autômato
+        grid = apply_fire_rules(grid, wind_direction, noise)  # Aplica as regras do autômato
         grids.append(grid.copy())  # Armazena a matriz atualizada na lista
 
     return grids
@@ -148,6 +152,7 @@ with st.sidebar.expander("Manual de Uso"):
     - **Intensidade do Fogo (kW/m)**: Define a intensidade do fogo.
     - **Tempo desde o último incêndio (anos)**: Define o tempo desde o último incêndio.
     - **Fator de Intervenção Humana**: Define a intervenção humana na propagação do fogo.
+    - **Ruído (%)**: Define a aleatoriedade no modelo de propagação do fogo.
     """)
 
 # Explicação do processo matemático e estatísticas
@@ -160,6 +165,8 @@ with st.sidebar.expander("Explicação do Processo Matemático"):
     - **Queimado**: Vegetação queimada.
 
     A probabilidade de uma célula pegar fogo depende de vários fatores, como temperatura, umidade, velocidade e direção do vento, e densidade da vegetação. O efeito do vento é modelado usando vetores direcionais e a propagação do fogo é calculada a cada passo de tempo da simulação.
+
+    O parâmetro de **ruído** adiciona uma aleatoriedade à propagação do fogo, representando incertezas e variabilidades no ambiente que podem afetar o comportamento do incêndio.
 
     ### Estatísticas e Interpretações
     A simulação permite observar como o fogo se propaga em diferentes condições ambientais. Os resultados podem ser utilizados para entender o comportamento do fogo e planejar estratégias de manejo e controle de incêndios.
@@ -181,7 +188,8 @@ params = {
     'ndvi': st.sidebar.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
     'fire_intensity': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
     'time_since_last_fire': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
-    'human_intervention': st.sidebar.slider('Fator de Intervenção Humana (escala 0-1)', 0.0, 1.0, 0.2)
+    'human_intervention': st.sidebar.slider('Fator de Intervenção Humana (escala 0-1)', 0.0, 1.0, 0.2),
+    'noise': st.sidebar.slider('Ruído (%)', 1, 100, 10)
 }
 
 # Tamanho da grade e número de passos
@@ -191,5 +199,6 @@ num_steps = st.sidebar.slider('Número de passos', 10, 200, 100)
 if st.button('Executar Simulação'):
     fire_start = (grid_size // 2, grid_size // 2)
     wind_direction = params['wind_direction']
-    simulation = run_simulation(grid_size, num_steps, fire_start, wind_direction)
+    noise = params['noise']
+    simulation = run_simulation(grid_size, num_steps, fire_start, wind_direction, noise)
     plot_simulation(simulation, fire_start, wind_direction)
