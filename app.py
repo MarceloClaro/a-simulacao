@@ -6,6 +6,7 @@ from matplotlib.colors import ListedColormap
 from scipy import stats
 from sklearn.metrics import confusion_matrix
 import pandas as pd
+import os
 
 # Define estados das células
 VIVO = 0        # Célula viva (verde)
@@ -186,7 +187,7 @@ def plotar_histogramas_e_erros(simulacao):
     st.pyplot(fig)
 
 # Função para calcular correlações e realizar ANOVA, Q-Exponential e matriz de confusão
-def realizar_estatisticas_avancadas(simulacao, params):
+def realizar_estatisticas_avancadas(simulacao, params, df_historico):
     contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
     contagem_queimando_df = pd.DataFrame(contagem_queimando, columns=["Células Queimando"])
 
@@ -211,17 +212,9 @@ def realizar_estatisticas_avancadas(simulacao, params):
     
     valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
 
-    # Entrada de dados do usuário para os últimos 10 registros
-    st.sidebar.markdown("### Inserir Dados dos Últimos 10 Registros")
-    periodo = st.sidebar.selectbox("Período dos Registros", ["Anos", "Meses", "Semanas", "Dias"])
-    adicionar_dados = st.sidebar.checkbox("Adicionar Dados Manuais")
-
-    if adicionar_dados:
-        for i in range(10):
-            st.sidebar.markdown(f"#### Registro {i + 1}")
-            for param in params.keys():
-                if isinstance(params[param], (int, float)):
-                    valores_params.at[i, param] = st.sidebar.number_input(f"{param.capitalize()} (Registro {i + 1})", value=params[param])
+    # Concatenar com histórico de dados, se disponível
+    if df_historico is not None:
+        valores_params = pd.concat([df_historico, valores_params], ignore_index=True)
 
     # Correlação de Spearman
     correlacao_spearman = valores_params.corr(method='spearman')
@@ -369,9 +362,45 @@ def main():
         'ruido': st.sidebar.slider('Ruído (%)', 1, 100, 10)
     }
 
+    # Opção para selecionar o período de entrada manual de dados
+    periodo = st.sidebar.selectbox("Selecione o período para entrada manual de dados", ["Dias", "Semanas", "Meses", "Anos"])
+
+    # Entrada manual de dados dos últimos 10 registros
+    st.sidebar.markdown(f"### Entrada manual de dados dos últimos 10 {periodo.lower()}")
+    historico_manual = []
+    for i in range(10):
+        with st.sidebar.expander(f"Registro {i+1}"):
+            registro = {
+                'temperatura': st.number_input(f'Temperatura (°C) - {i+1}', 0, 50, 30),
+                'umidade': st.number_input(f'Umidade relativa (%) - {i+1}', 0, 100, 40),
+                'velocidade_vento': st.number_input(f'Velocidade do Vento (km/h) - {i+1}', 0, 100, 20),
+                'direcao_vento': st.number_input(f'Direção do Vento (graus) - {i+1}', 0, 360, 90),
+                'precipitacao': st.number_input(f'Precipitação (mm/dia) - {i+1}', 0, 200, 0),
+                'radiacao_solar': st.number_input(f'Radiação Solar (W/m²) - {i+1}', 0, 1200, 800),
+                'tipo_vegetacao': st.selectbox(f'Tipo de vegetação - {i+1}', ['pastagem', 'matagal', 'floresta']),
+                'densidade_vegetacao': st.number_input(f'Densidade Vegetal (%) - {i+1}', 0, 100, 70),
+                'umidade_combustivel': st.number_input(f'Teor de umidade do combustível (%) - {i+1}', 0, 100, 10),
+                'topografia': st.number_input(f'Topografia (inclinação em graus) - {i+1}', 0, 45, 5),
+                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso', 'argiloso']),
+                'ndvi': st.number_input(f'NDVI (Índice de Vegetação por Diferença Normalizada) - {i+1}', 0.0, 1.0, 0.6),
+                'intensidade_fogo': st.number_input(f'Intensidade do Fogo (kW/m) - {i+1}', 0, 10000, 5000),
+                'tempo_desde_ultimo_fogo': st.number_input(f'Tempo desde o último incêndio (anos) - {i+1}', 0, 100, 10),
+                'intervencao_humana': st.number_input(f'Fator de Intervenção Humana (escala 0-1) - {i+1}', 0.0, 1.0, 0.2),
+                'ruido': st.number_input(f'Ruído (%) - {i+1}', 1, 100, 10)
+            }
+            historico_manual.append(registro)
+
+    # Converter histórico manual para DataFrame
+    df_historico_manual = pd.DataFrame(historico_manual)
+
     # Tamanho da grade e número de passos
     tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
     num_passos = st.sidebar.slider('Número de passos', 10, 200, 100)
+
+    # Carregar dados históricos do CSV
+    df_historico_csv = None
+    if os.path.exists('historico_parametros.csv'):
+        df_historico_csv = pd.read_csv('historico_parametros.csv')
 
     if st.button('Executar Simulação'):
         inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
@@ -379,7 +408,19 @@ def main():
         simulacao = executar_simulacao(tamanho_grade, num_passos, inicio_fogo, params, ruido)
         plotar_simulacao(simulacao, inicio_fogo, params['direcao_vento'])
         plotar_histogramas_e_erros(simulacao)
-        realizar_estatisticas_avancadas(simulacao, params)
+        
+        if not df_historico_manual.empty:
+            realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
+        else:
+            realizar_estatisticas_avancadas(simulacao, params, df_historico_csv)
+
+        # Salvar parâmetros atuais no CSV
+        df_novos_parametros = pd.DataFrame([params])
+        if df_historico_csv is not None:
+            df_historico_csv = pd.concat([df_historico_csv, df_novos_parametros], ignore_index=True)
+        else:
+            df_historico_csv = df_novos_parametros
+        df_historico_csv.to_csv('historico_parametros.csv', index=False)
 
 if __name__ == "__main__":
     main()
