@@ -168,6 +168,35 @@ with st.sidebar.expander("Explicação do Processo Matemático"):
 
     O parâmetro de **ruído** adiciona uma aleatoriedade à propagação do fogo, representando incertezas e variabilidades no ambiente que podem afetar o comportamento do incêndio.
 
+    ### Equação da Regra do Autômato Celular
+    A probabilidade de uma célula (i, j) pegar fogo é dada por:
+
+    \\[
+    P_{spread}(i, j) = P_{base} \times W_{effect}(i, j) \times N_{effect}
+    \\]
+
+    Onde:
+    - \\( P_{spread}(i, j) \\) é a probabilidade de propagação do fogo para a célula (i, j).
+    - \\( P_{base} \\) é a probabilidade base de uma célula pegar fogo (dependente do estado da célula e de outros fatores).
+    - \\( W_{effect}(i, j) \\) é o efeito do vento na propagação do fogo para a célula (i, j).
+    - \\( N_{effect} \\) é o efeito do ruído na propagação do fogo.
+
+    ### Elementos da Equação
+    - **P_{base}**: Esta é a probabilidade base determinada por vários fatores ambientais:
+      - **Temperatura (°C)**: Quanto maior a temperatura, maior a probabilidade de propagação do fogo.
+      - **Umidade relativa (%)**: Quanto menor a umidade, maior a probabilidade de propagação do fogo.
+      - **Densidade Vegetal (%)**: Quanto maior a densidade da vegetação, maior a probabilidade de propagação do fogo.
+      - **Teor de umidade do combustível (%)**: Quanto menor a umidade do combustível, maior a probabilidade de propagação do fogo.
+      - **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
+      - **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
+
+    - **W_{effect}(i, j)**: Este fator é calculado com base na direção e velocidade do vento, influenciando a probabilidade de propagação do fogo na direção do vento:
+      - **Velocidade do Vento (km/h)**: Quanto maior a velocidade do vento, maior a probabilidade de propagação do fogo.
+      - **Direção do Vento (graus)**: A direção do vento influencia a direção preferencial de propagação do fogo.
+
+    - **N_{effect}**: Este é um fator aleatório que introduz ruído na simulação, representando incertezas e variabilidades ambientais:
+      - **Ruído (%)**: Define o nível de aleatoriedade na propagação do fogo, variando de 1% a 100%.
+
     ### Estatísticas e Interpretações
     A simulação permite observar como o fogo se propaga em diferentes condições ambientais. Os resultados podem ser utilizados para entender o comportamento do fogo e planejar estratégias de manejo e controle de incêndios.
     """)
