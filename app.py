@@ -32,6 +32,13 @@ valores_tipo_vegetacao = {
     'floresta': 1.0
 }
 
+# Atribui valores numéricos ao tipo de solo
+valores_tipo_solo = {
+    'arenoso': 0.5,
+    'argiloso': 0.75,
+    'argiloso': 1.0
+}
+
 # Inicializa a matriz do autômato celular
 def inicializar_grade(tamanho, inicio_fogo):
     grade = np.zeros((tamanho, tamanho), dtype=int)  # Cria uma matriz de zeros (células vivas)
@@ -50,11 +57,12 @@ def calcular_probabilidade_propagacao(params):
     fator_intensidade_fogo = params['intensidade_fogo'] / 10000
     fator_intervencao_humana = 1 - params['intervencao_humana']
     fator_tipo_vegetacao = valores_tipo_vegetacao[params['tipo_vegetacao']]
+    fator_tipo_solo = valores_tipo_solo[params['tipo_solo']]
 
     prob_base = 0.3
     prob = prob_base + 0.1 * (fator_temp + fator_umidade + fator_velocidade_vento + fator_densidade_vegetacao +
                               fator_umidade_combustivel + fator_topografia + fator_ndvi + fator_intensidade_fogo +
-                              fator_tipo_vegetacao) * fator_intervencao_humana
+                              fator_tipo_vegetacao + fator_tipo_solo) * fator_intervencao_humana
 
     return min(max(prob, 0), 1)
 
@@ -193,7 +201,7 @@ def realizar_estatisticas_avancadas(simulacao, params):
         'densidade_vegetacao': params['densidade_vegetacao'],
         'umidade_combustivel': params['umidade_combustivel'],
         'topografia': params['topografia'],
-        'tipo_solo': valores_tipo_vegetacao[params['tipo_vegetacao']],
+        'tipo_solo': valores_tipo_solo[params['tipo_solo']],
         'ndvi': params['ndvi'],
         'intensidade_fogo': params['intensidade_fogo'],
         'tempo_desde_ultimo_fogo': params['tempo_desde_ultimo_fogo'],
@@ -308,6 +316,7 @@ def main():
           - **Teor de umidade do combustível (%)**: Quanto menor a umidade do combustível, maior a probabilidade de propagação do fogo.
           - **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
           - **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
+          - **Tipo de solo**: Diferentes tipos de solo influenciam a probabilidade base de propagação do fogo.
 
         - **W_{effect}(i, j)**: Este fator é calculado com base na direção e velocidade do vento, influenciando a probabilidade de propagação do fogo na direção do vento:
           - **Velocidade do Vento (km/h)**: Quanto maior a velocidade do vento, maior a probabilidade de propagação do fogo.
