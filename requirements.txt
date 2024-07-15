@@ -1,4 +1,7 @@
 streamlit
-matplotlib
 numpy
-groq
+matplotlib
+seaborn
+scipy
+scikit-learn
+pandas
