@@ -105,7 +105,10 @@ def plot_simulation(simulation, fire_start, wind_direction):
                      head_width=5, head_length=5, fc='blue', ec='blue')
             ax.text(80, 95, f'Vento {wind_direction}°', color='blue', fontsize=12)
 
-        ax.grid(True)  # Exibe a malha cartesiana
+        ax.set_xticks(np.arange(-.5, len(grid), 1), minor=True)
+        ax.set_yticks(np.arange(-.5, len(grid), 1), minor=True)
+        ax.grid(which='minor', color='gray', linestyle='-', linewidth=0.5)
+        ax.tick_params(which='minor', size=0)
 
     # Cria a legenda para os diferentes estados das células
     handles = [plt.Rectangle((0,0),1,1, color=cmap.colors[i]) for i in range(6)]
