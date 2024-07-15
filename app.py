@@ -43,24 +43,27 @@ def apply_fire_rules(grid, wind_direction):
             elif grid[i, j] == BURNING4:
                 new_grid[i, j] = BURNED
                 # Propaga o fogo para células adjacentes com base na probabilidade e efeito do vento
-                if grid[i-1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, 'N'):
+                if grid[i-1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i-1, j), (i, j)):
                     new_grid[i-1, j] = BURNING1
-                if grid[i+1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, 'S'):
+                if grid[i+1, j] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i+1, j), (i, j)):
                     new_grid[i+1, j] = BURNING1
-                if grid[i, j-1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, 'W'):
+                if grid[i, j-1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i, j-1), (i, j)):
                     new_grid[i, j-1] = BURNING1
-                if grid[i, j+1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, 'E'):
+                if grid[i, j+1] == ALIVE and np.random.rand() < probabilities[ALIVE] * wind_effect(wind_direction, (i, j+1), (i, j)):
                     new_grid[i, j+1] = BURNING1
     return new_grid
 
 # Função para modelar o efeito do vento
-def wind_effect(wind_direction, direction):
-    effect = 1.0  # Efeito padrão (sem alteração)
-    if wind_direction == direction:
-        effect = 1.5  # Aumenta a probabilidade se o vento estiver na mesma direção
-    elif (wind_direction == 'N' and direction == 'S') or (wind_direction == 'S' and direction == 'N') or \
-         (wind_direction == 'E' and direction == 'W') or (wind_direction == 'W' and direction == 'E'):
-        effect = 0.5  # Reduz a probabilidade se o vento estiver na direção oposta
+def wind_effect(wind_direction, cell, source):
+    wind_angle_rad = np.deg2rad(wind_direction)
+    wind_vector = np.array([np.cos(wind_angle_rad), np.sin(wind_angle_rad)])
+    
+    direction_vector = np.array([cell[0] - source[0], cell[1] - source[1]])
+    direction_vector = direction_vector / np.linalg.norm(direction_vector)
+    
+    effect = np.dot(wind_vector, direction_vector)
+    effect = (effect + 1) / 2  # Normaliza para um valor entre 0 e 1
+    
     return effect
 
 # Função para executar a simulação
@@ -98,18 +101,9 @@ def plot_simulation(simulation, fire_start, wind_direction):
 
         # Desenha uma seta para indicar a direção do vento com texto
         if i == len(axes) - 1:  # Último gráfico
-            if wind_direction == 'E':
-                ax.arrow(80, 90, 10, 0, head_width=5, head_length=5, fc='blue', ec='blue')
-                ax.text(75, 120, 'Vento Leste', color='blue', fontsize=12)
-            elif wind_direction == 'W':
-                ax.arrow(20, 90, -10, 0, head_width=5, head_length=5, fc='blue', ec='blue')
-                ax.text(15, 95, 'Vento Oeste', color='blue', fontsize=12)
-            elif wind_direction == 'N':
-                ax.arrow(90, 80, 0, -10, head_width=5, head_length=5, fc='blue', ec='blue')
-                ax.text(95, 85, 'Vento Norte', color='blue', fontsize=12)
-            elif wind_direction == 'S':
-                ax.arrow(90, 20, 0, 10, head_width=5, head_length=5, fc='blue', ec='blue')
-                ax.text(95, 25, 'Vento Sul', color='blue', fontsize=12)
+            ax.arrow(90, 90, 10 * np.cos(np.deg2rad(wind_direction)), 10 * np.sin(np.deg2rad(wind_direction)),
+                     head_width=5, head_length=5, fc='blue', ec='blue')
+            ax.text(80, 95, f'Vento {wind_direction}°', color='blue', fontsize=12)
 
         ax.grid(True)  # Exibe a malha cartesiana
 
@@ -122,30 +116,77 @@ def plot_simulation(simulation, fire_start, wind_direction):
     st.pyplot(fig)
 
 # Interface do Streamlit
-st.title("EcoSim.ai - Simulador de Propagação de Incêndio em Autômatos Celulares")
+st.set_page_config(page_title="EcoSim.ai - Simulador de Propagação de Incêndio", page_icon="🔥")
+
+st.title("EcoSim.ai")
+st.subheader("Simulador de Propagação de Incêndio em Autômatos Celulares")
+
+st.sidebar.image("logo.png", width=200)
+
+# Manual de uso
+with st.sidebar.expander("Manual de Uso"):
+    st.markdown("""
+    ### Manual de Uso
+    Este simulador permite modelar a propagação do fogo em diferentes condições ambientais. Para utilizar:
+    1. Ajuste os parâmetros de simulação usando os controles deslizantes.
+    2. Clique em "Executar Simulação" para iniciar a simulação.
+    3. Visualize os resultados da propagação do incêndio na área principal.
+
+    ### Parâmetros de Simulação
+    - **Temperatura (°C)**: Define a temperatura ambiente.
+    - **Umidade relativa (%)**: Define a umidade do ar.
+    - **Velocidade do Vento (km/h)**: Define a velocidade do vento.
+    - **Direção do Vento (graus)**: Define a direção do vento em graus.
+    - **Precipitação (mm/dia)**: Define a quantidade de chuva.
+    - **Radiação Solar (W/m²)**: Define a intensidade da radiação solar.
+    - **Tipo de vegetação**: Seleciona o tipo de vegetação.
+    - **Densidade Vegetal (%)**: Define a densidade da vegetação.
+    - **Teor de umidade do combustível (%)**: Define a umidade do material combustível.
+    - **Topografia (inclinação em graus)**: Define a inclinação do terreno.
+    - **Tipo de solo**: Seleciona o tipo de solo.
+    - **NDVI**: Define o índice de vegetação por diferença normalizada.
+    - **Intensidade do Fogo (kW/m)**: Define a intensidade do fogo.
+    - **Tempo desde o último incêndio (anos)**: Define o tempo desde o último incêndio.
+    - **Fator de Intervenção Humana**: Define a intervenção humana na propagação do fogo.
+    """)
+
+# Explicação do processo matemático e estatísticas
+with st.sidebar.expander("Explicação do Processo Matemático"):
+    st.markdown("""
+    ### Explicação do Processo Matemático
+    O simulador utiliza autômatos celulares para modelar a propagação do fogo. Cada célula do grid representa um pedaço de terreno que pode estar em diferentes estados:
+    - **Intacto**: Vegetação não queimada.
+    - **Queimando1 a Queimando4**: Diferentes estágios de queima.
+    - **Queimado**: Vegetação queimada.
+
+    A probabilidade de uma célula pegar fogo depende de vários fatores, como temperatura, umidade, velocidade e direção do vento, e densidade da vegetação. O efeito do vento é modelado usando vetores direcionais e a propagação do fogo é calculada a cada passo de tempo da simulação.
+
+    ### Estatísticas e Interpretações
+    A simulação permite observar como o fogo se propaga em diferentes condições ambientais. Os resultados podem ser utilizados para entender o comportamento do fogo e planejar estratégias de manejo e controle de incêndios.
+    """)
 
 # Definir parâmetros
 params = {
-    'temperature': st.slider('Temperatura (°C)', 0, 50, 30),
-    'humidity': st.slider('Umidade relativa (%)', 0, 100, 40),
-    'wind_speed': st.slider('Velocidade do Vento (km/h)', 0, 100, 20),
-    'wind_direction': st.selectbox('Direção do Vento', ['N', 'S', 'E', 'W']),
-    'precipitation': st.slider('Precipitação (mm/dia)', 0, 200, 0),
-    'solar_radiation': st.slider('Radiação Solar (W/m²)', 0, 1200, 800),
-    'vegetation_type': st.selectbox('Tipo de vegetação', ['pastagem', 'matagal', 'floresta']),
-    'vegetation_density': st.slider('Densidade Vegetal (%)', 0, 100, 70),
-    'fuel_moisture': st.slider('Teor de umidade do combustível (%)', 0, 100, 10),
-    'topography': st.slider('Topografia (inclinação em graus)', 0, 45, 5),
-    'soil_type': st.selectbox('Tipo de solo', ['arenoso', 'argiloso', 'argiloso']),
-    'ndvi': st.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
-    'fire_intensity': st.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
-    'time_since_last_fire': st.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
-    'human_intervention': st.slider('Fator de Intervenção Humana (escala 0-1)', 0.0, 1.0, 0.2)
+    'temperature': st.sidebar.slider('Temperatura (°C)', 0, 50, 30),
+    'humidity': st.sidebar.slider('Umidade relativa (%)', 0, 100, 40),
+    'wind_speed': st.sidebar.slider('Velocidade do Vento (km/h)', 0, 100, 20),
+    'wind_direction': st.sidebar.slider('Direção do Vento (graus)', 0, 360, 90),
+    'precipitation': st.sidebar.slider('Precipitação (mm/dia)', 0, 200, 0),
+    'solar_radiation': st.sidebar.slider('Radiação Solar (W/m²)', 0, 1200, 800),
+    'vegetation_type': st.sidebar.selectbox('Tipo de vegetação', ['pastagem', 'matagal', 'floresta']),
+    'vegetation_density': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
+    'fuel_moisture': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
+    'topography': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
+    'soil_type': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso', 'argiloso']),
+    'ndvi': st.sidebar.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
+    'fire_intensity': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
+    'time_since_last_fire': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
+    'human_intervention': st.sidebar.slider('Fator de Intervenção Humana (escala 0-1)', 0.0, 1.0, 0.2)
 }
 
 # Tamanho da grade e número de passos
-grid_size = st.slider('Tamanho da grade', 10, 100, 50)
-num_steps = st.slider('Número de passos', 10, 200, 100)
+grid_size = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
+num_steps = st.sidebar.slider('Número de passos', 10, 200, 100)
 
 if st.button('Executar Simulação'):
     fire_start = (grid_size // 2, grid_size // 2)
