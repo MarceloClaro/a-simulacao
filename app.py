@@ -165,11 +165,6 @@ def perform_advanced_statistics(simulation, params):
     st.write("### Resultado da ANOVA:")
     st.write(f"F-valor: {f_val}, p-valor: {p_val}")
 
-    # Q-Statistics (Q-Teste de Cochran)
-    q_stat, q_pval = stats.cochrans_q(thirds[0], thirds[1], thirds[2])
-    st.write("### Resultado do Q-Statistics (Q-Teste de Cochran):")
-    st.write(f"Q-valor: {q_stat}, p-valor: {q_pval}")
-
     # Q-Exponential
     def q_exponential(values, q):
         return (1 - (1 - q) * values)**(1 / (1 - q))
@@ -180,7 +175,7 @@ def perform_advanced_statistics(simulation, params):
     st.write(q_exponential_values)
 
     # Matriz de Confusão
-    y_true = np.concatenate([grid.flatten() for grid in simulation])
+    y_true = np.concatenate([grid.flatten() for grid in simulation[:-1]])
     y_pred = np.concatenate([grid.flatten() for grid in simulation[1:]])
     conf_matrix = confusion_matrix(y_true, y_pred, labels=[ALIVE, BURNING1, BURNING2, BURNING3, BURNING4, BURNED])
     st.write("### Matriz de Confusão:")
@@ -280,7 +275,6 @@ def main():
         - **Gráficos de Margem de Erro**: Visualização da média e margem de erro da propagação do fogo.
         - **Correlação de Spearman**: Medida não paramétrica da dependência entre duas variáveis.
         - **ANOVA**: Análise de variância para verificar diferenças significativas entre os grupos.
-        - **Q-Statistics**: Teste de Cochran para variáveis binárias.
         - **Q-Exponential**: Distribuição Q-Exponencial para modelagem de dados.
         - **Matriz de Confusão**: Ferramenta para medir o desempenho do modelo de classificação.
         """)
