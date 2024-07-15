@@ -186,7 +186,7 @@ params = {
 
 # Tamanho da grade e número de passos
 grid_size = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
-num_steps = st.sidebar.slider('Número de passos', 10, 200, 100)
+num_steps = st.sidebar.slider('Número de passos', 10, 2000, 1000)
 
 if st.button('Executar Simulação'):
     fire_start = (grid_size // 2, grid_size // 2)
