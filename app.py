@@ -216,6 +216,10 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico):
     if df_historico is not None:
         valores_params = pd.concat([df_historico, valores_params], ignore_index=True)
 
+    # Garantir que todas as colunas sejam numéricas
+    valores_params = valores_params.apply(pd.to_numeric, errors='coerce')
+    valores_params = valores_params.dropna()
+
     # Correlação de Spearman
     correlacao_spearman = valores_params.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
