@@ -8,12 +8,6 @@ from sklearn.metrics import confusion_matrix
 import pandas as pd
 import os
 
-from pyspark.sql import SparkSession
-from pyspark.sql.types import *
-
-# Inicializar a sessão Spark
-spark = SparkSession.builder.appName("EcoSim.ai").getOrCreate()
-
 # Define estados das células
 VIVO = 0        # Célula viva (verde)
 QUEIMANDO1 = 1  # Célula começando a queimar (amarelo)
@@ -32,7 +26,7 @@ probabilidades = {
     QUEIMADO: 0      # Uma célula queimada não pode pegar fogo novamente
 }
 
-# Atribui valores numéricos ao tipo de vegetação e tipo de solo
+# Atribui valores numéricos ao tipo de vegetação e solo
 valores_tipo_vegetacao = {
     'pastagem': 0.5,
     'matagal': 0.75,
@@ -217,13 +211,13 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
     
     valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
 
-    # Concatenar com o histórico manual se disponível
-    if df_historico_manual is not None:
+    # Adicionar dados históricos manuais se disponíveis
+    if not df_historico_manual.empty:
         valores_params = pd.concat([valores_params, df_historico_manual], ignore_index=True)
 
-    # Converter para tipo numérico
+    # Corrigir tipos de dados para garantir compatibilidade na correlação
     valores_params = valores_params.apply(pd.to_numeric, errors='coerce')
-
+    
     # Correlação de Spearman
     correlacao_spearman = valores_params.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
@@ -370,11 +364,12 @@ def main():
         'ruido': st.sidebar.slider('Ruído (%)', 1, 100, 10)
     }
 
-    # Opção para entrada manual de dados históricos
-    periodo = st.sidebar.selectbox("Período dos últimos registros:", ["Anos", "Meses", "Semanas", "Dias"])
+    # Entrada manual de dados históricos
+    st.sidebar.subheader("Entrada Manual de Dados Históricos")
     historico_manual = []
-    for i in range(10):
-        with st.sidebar.expander(f"Registro {i+1}"):
+    if st.sidebar.checkbox("Adicionar dados históricos manualmente"):
+        periodo = st.sidebar.selectbox("Período dos dados", ["anos", "meses", "semanas", "dias"])
+        for i in range(1, 11):
             registro = {
                 'temperatura': st.number_input(f'Temperatura (°C) - {i+1}', 0, 50, 30),
                 'umidade': st.number_input(f'Umidade relativa (%) - {i+1}', 0, 100, 40),
@@ -387,15 +382,13 @@ def main():
                 'umidade_combustivel': st.number_input(f'Teor de umidade do combustível (%) - {i+1}', 0, 100, 10),
                 'topografia': st.number_input(f'Topografia (inclinação em graus) - {i+1}', 0, 45, 5),
                 'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso', 'argiloso']),
-                'ndvi': st.number_input(f'NDVI (Índice de Vegetação por Diferença Normalizada) - {i+1}', 0.0, 1.0, 0.6),
+                'ndvi': st.number_input(f'NDVI - {i+1}', 0.0, 1.0, 0.6),
                 'intensidade_fogo': st.number_input(f'Intensidade do Fogo (kW/m) - {i+1}', 0, 10000, 5000),
                 'tempo_desde_ultimo_fogo': st.number_input(f'Tempo desde o último incêndio (anos) - {i+1}', 0, 100, 10),
                 'intervencao_humana': st.number_input(f'Fator de Intervenção Humana (escala 0-1) - {i+1}', 0.0, 1.0, 0.2),
                 'ruido': st.number_input(f'Ruído (%) - {i+1}', 1, 100, 10)
             }
             historico_manual.append(registro)
-
-    df_historico_manual = pd.DataFrame(historico_manual)
 
     # Tamanho da grade e número de passos
     tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
@@ -406,19 +399,8 @@ def main():
         ruido = params['ruido']
         simulacao = executar_simulacao(tamanho_grade, num_passos, inicio_fogo, params, ruido)
         plotar_simulacao(simulacao, inicio_fogo, params['direcao_vento'])
-        plotar_histogramas_e_erros(simulacao)
+        df_historico_manual = pd.DataFrame(historico_manual)
         realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
-
-        # Salvar dados no arquivo CSV
-        df_novos_parametros = pd.DataFrame([params])
-        arquivo_csv = 'dados_simulacao.csv'
-        if os.path.exists(arquivo_csv):
-            df_historico_csv = pd.read_csv(arquivo_csv)
-            df_historico_csv = pd.concat([df_historico_csv, df_novos_parametros], ignore_index=True)
-        else:
-            df_historico_csv = df_novos_parametros
-
-        df_historico_csv.to_csv(arquivo_csv, index=False)
 
 if __name__ == "__main__":
     main()
