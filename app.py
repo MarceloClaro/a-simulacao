@@ -543,47 +543,45 @@ def main():
     Instagram: [https://www.instagram.com/marceloclaro.geomaker/](https://www.instagram.com/marceloclaro.geomaker/)
     """)
     #_____________________________________________________________________
-#_________________________________________________________________
-import streamlit as st
-import base64
-
-def main():
-    # Adiciona um título na barra lateral
-    st.sidebar.title("Controle de Áudio")
+    #_________________________________________________________________
+    import streamlit as st
+    import base64
     
-    # Lista de arquivos MP3
-    mp3_files = {
-        "Agente Alan Kay": "AGENTE-4AlanKay1.mp3",
-        "Agente 4": "agente4.mp3",
-        "Agente Alan-Kay": "AGENTEAlan-Kay.mp3",
-        "Instrumental": "ambienteindia.mp3"
-    }
-
-    # Controle de seleção de música
-    selected_mp3 = st.sidebar.radio("Escolha uma música", list(mp3_files.keys()))
-
-    # Opção de loop
-    loop = st.sidebar.checkbox("Repetir música")
-
-    # Carregar e exibir o player de áudio
-    audio_placeholder = st.sidebar.empty()
-    if selected_mp3:
-        mp3_path = mp3_files[selected_mp3]
-        try:
-            with open(mp3_path, "rb") as audio_file:
-                audio_bytes = audio_file.read()
-                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-                loop_attr = "loop" if loop else ""
-                audio_html = f"""
-                <audio id="audio-player" controls autoplay {loop_attr}>
-                  <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-                  Seu navegador não suporta o elemento de áudio.
-                </audio>
-                """
-                audio_placeholder.markdown(audio_html, unsafe_allow_html=True)
-        except FileNotFoundError:
-            audio_placeholder.error(f"Arquivo {mp3_path} não encontrado.")
-    #_____________________________________________________________________
+    def main():
+        # Adiciona um título na barra lateral
+        st.sidebar.title("Controle de Áudio")
+        
+        # Lista de arquivos MP3
+        mp3_files = {
+            "Agente Alan Kay": "apresentação ac.mp3"
+            
+        }
+    
+        # Controle de seleção de música
+        selected_mp3 = st.sidebar.radio("Escolha uma música", list(mp3_files.keys()))
+    
+        # Opção de loop
+        loop = st.sidebar.checkbox("Repetir música")
+    
+        # Carregar e exibir o player de áudio
+        audio_placeholder = st.sidebar.empty()
+        if selected_mp3:
+            mp3_path = mp3_files[selected_mp3]
+            try:
+                with open(mp3_path, "rb") as audio_file:
+                    audio_bytes = audio_file.read()
+                    audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+                    loop_attr = "loop" if loop else ""
+                    audio_html = f"""
+                    <audio id="audio-player" controls autoplay {loop_attr}>
+                      <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+                      Seu navegador não suporta o elemento de áudio.
+                    </audio>
+                    """
+                    audio_placeholder.markdown(audio_html, unsafe_allow_html=True)
+            except FileNotFoundError:
+                audio_placeholder.error(f"Arquivo {mp3_path} não encontrado.")
+        #_____________________________________________________________________
 
     if st.button('Executar Simulação'):
         inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
