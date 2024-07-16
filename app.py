@@ -350,7 +350,7 @@ def main():
 
     # Controle de Áudio
     st.sidebar.title("Controle de Áudio")
-    mp3_files = {"Agente Alan Kay": "apresentação ac.mp3"}
+    mp3_files = {"Explicação do Processo Matemático": "apresentação ac.mp3"}
     selected_mp3 = st.sidebar.radio("Escolha uma música", list(mp3_files.keys()))
     loop = st.sidebar.checkbox("Repetir música")
 
