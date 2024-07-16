@@ -36,6 +36,7 @@ valores_tipo_vegetacao = {
 # Atribui valores numéricos ao tipo de solo
 valores_tipo_solo = {
     'arenoso': 0.5,
+    'misto': 0.75,
     'argiloso': 1.0
 }
 
@@ -352,12 +353,32 @@ def main():
         A simulação permite observar como o fogo se propaga em diferentes condições ambientais. Os resultados podem ser utilizados para entender o comportamento do fogo e planejar estratégias de manejo e controle de incêndios.
 
         ### Análises Estatísticas
-        - **Histogramas**: Visualização da distribuição das células queimando ao longo do tempo.
-        - **Gráficos de Margem de Erro**: Visualização da média e margem de erro da propagação do fogo.
-        - **Correlação de Spearman**: Medida não paramétrica da dependência entre duas variáveis.
-        - **ANOVA**: Análise de variância para verificar diferenças significativas entre os grupos.
-        - **Q-Exponential**: Distribuição Q-Exponencial para modelagem de dados.
-        - **Matriz de Confusão**: Ferramenta para medir o desempenho do modelo de classificação.
+            
+        #### Histogramas
+        Um histograma é um gráfico de barras que mostra a frequência com que algo acontece. Imagine que estamos observando quantas árvores estão pegando fogo em uma floresta a cada dia durante um mês. No nosso simulador de fogo, um histograma nos ajuda a visualizar quantas células (pedaços de terreno) estão queimando em cada etapa do tempo da simulação. Por exemplo, se temos 10 células queimando no primeiro dia, 15 no segundo e assim por diante, o histograma mostrará essas contagens como barras, permitindo ver como o fogo se espalha ao longo do tempo.
+        
+        #### Gráficos de Margem de Erro
+        Um gráfico de margem de erro mostra a média de um conjunto de dados e a variação ao redor dessa média. A média é como calcular a "nota média" de uma turma de alunos. No caso do nosso simulador, a média seria o número médio de células queimando a cada dia. A margem de erro indica o quanto esses números podem variar em torno da média. Se a margem de erro é pequena, significa que os números estão próximos da média; se é grande, significa que os números variam bastante. Isso ajuda a entender a consistência da propagação do fogo.
+        
+        #### Correlação de Spearman
+        Correlação de Spearman é uma forma de medir a relação entre duas coisas sem assumir que essa relação seja linear. Por exemplo, podemos usar a correlação de Spearman para ver se existe uma relação entre a temperatura e a velocidade do fogo. Se a correlação for alta, significa que quando uma dessas variáveis aumenta, a outra também tende a aumentar (ou diminuir). Por exemplo, se a temperatura aumenta e o fogo se espalha mais rapidamente, isso indicaria uma alta correlação positiva.
+        
+        #### ANOVA
+        ANOVA, ou Análise de Variância, é um teste estatístico que compara as médias de diferentes grupos para ver se há diferenças significativas entre eles. No contexto do simulador de fogo, podemos usar ANOVA para comparar diferentes cenários, como a propagação do fogo em diferentes tipos de vegetação (pastagem, matagal, floresta). Se os resultados mostram que há uma diferença significativa (um p-valor muito pequeno, como 2.1937988526058356e-30), significa que a propagação do fogo varia significativamente entre os tipos de vegetação.
+        
+        #### Q-Exponential
+        A distribuição Q-Exponencial é uma maneira de modelar dados que não seguem uma distribuição normal. É útil quando estamos lidando com fenômenos complexos como a propagação do fogo, onde os eventos não acontecem de maneira previsível. Este método nos ajuda a entender melhor a distribuição dos dados em situações complexas. Por exemplo, os valores Q-Exponencial para o número de células queimando podem mostrar uma distribuição que não é simétrica, indicando que há dias em que o fogo se espalha muito mais rápido do que em outros.
+        
+        #### Matriz de Confusão
+        Uma matriz de confusão é uma tabela usada para avaliar a performance de um modelo de classificação. No nosso simulador de fogo, a matriz de confusão mostra quantas vezes o modelo previu corretamente (ou incorretamente) o estado de uma célula (se estava intacta, queimando ou queimada). É como uma tabela que mostra quantas vezes um aluno acertou ou errou diferentes tipos de perguntas em uma prova. Por exemplo, se a matriz de confusão mostra que 243191 células foram corretamente identificadas como intactas e 126 células foram corretamente identificadas em cada estágio de queima, mas algumas previsões foram incorretas, isso nos ajuda a entender se o modelo está funcionando bem ou se precisa de ajustes.
+        
+        Exemplo de Matriz de Confusão:
+          - [[243191, 129, 0, 0, 0, 0], [0, 0, 126, 0, 0, 0], [0, 0, 0, 126, 0, 0], [0, 0, 0, 0, 126, 0], [0, 0, 0, 0, 0, 126], [0, 0, 0, 0, 0, 6176]]
+          - 243191 células foram corretamente identificadas como intactas.
+          - 126 células foram corretamente identificadas em cada estágio de queima.
+          - Alguns erros de previsão (129 células foram incorretamente identificadas como queimando quando não estavam).
+        
+        Essas análises estatísticas são importantes para entender melhor como o fogo se propaga e para melhorar a precisão do nosso simulador.
         """)
 
     # Definir parâmetros
