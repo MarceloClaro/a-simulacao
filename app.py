@@ -6,6 +6,7 @@ from matplotlib.colors import ListedColormap
 from scipy import stats
 from sklearn.metrics import confusion_matrix
 import pandas as pd
+from fpdf import FPDF
 
 # Define estados das células
 VIVO = 0        # Célula viva (verde)
@@ -155,7 +156,7 @@ def plotar_simulacao(simulacao, inicio_fogo, direcao_vento):
     labels = ['Intacto', 'Queimando1', 'Queimando2', 'Queimando3', 'Queimando4', 'Queimado']
     fig.legend(handles, labels, loc='lower center', ncol=3, bbox_to_anchor=(0.5, -0.05))
 
-    plt.tight_layout()  # Ajusta o layout para evitar sobreposição
+    plt.tight_layout()
     st.pyplot(fig)
 
 # Função para plotar histogramas e gráficos de margem de erro
@@ -200,7 +201,6 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
         'densidade_vegetacao': params['densidade_vegetacao'],
         'umidade_combustivel': params['umidade_combustivel'],
         'topografia': params['topografia'],
-        'tipo_vegetacao': valores_tipo_vegetacao[params['tipo_vegetacao']],
         'tipo_solo': valores_tipo_solo[params['tipo_solo']],
         'ndvi': params['ndvi'],
         'intensidade_fogo': params['intensidade_fogo'],
@@ -213,9 +213,12 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
 
     # Adiciona dados históricos manuais
     if not df_historico_manual.empty:
+        df_historico_manual['tipo_vegetacao'] = df_historico_manual['tipo_vegetacao'].map(valores_tipo_vegetacao)
+        df_historico_manual['tipo_solo'] = df_historico_manual['tipo_solo'].map(valores_tipo_solo)
         df_historico_manual = df_historico_manual.apply(pd.to_numeric, errors='coerce')
         valores_params = pd.concat([valores_params, df_historico_manual], ignore_index=True)
-    
+        valores_params = valores_params.apply(pd.to_numeric, errors='coerce')
+
     # Correlação de Spearman
     correlacao_spearman = valores_params.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
@@ -249,6 +252,21 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
     ax.set_ylabel('Estado Real')
     ax.set_title('Matriz de Confusão')
     st.pyplot(fig)
+
+    return correlacao_spearman, f_val, p_val, valores_q_exponencial, matriz_confusao
+
+# Função para gerar e baixar PDF
+def gerar_pdf(resultados):
+    pdf = FPDF()
+    pdf.add_page()
+
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Resultados da Simulação de Propagação de Incêndio", ln=True, align='C')
+    
+    for key, value in resultados.items():
+        pdf.cell(200, 10, txt=f"{key}: {value}", ln=True, align='L')
+
+    return pdf.output(dest='S').encode('latin1')
 
 # Função principal para a interface do Streamlit
 def main():
@@ -321,7 +339,7 @@ def main():
           - **Teor de umidade do combustível (%)**: Quanto menor a umidade do combustível, maior a probabilidade de propagação do fogo.
           - **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
           - **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
-          - **Tipo de solo**: Diferentes tipos de solo têm diferentes probabilidades base de pegar fogo.
+          - **Tipo de solo**: Diferentes tipos de solo influenciam a probabilidade de propagação do fogo.
 
         - **W_{effect}(i, j)**: Este fator é calculado com base na direção e velocidade do vento, influenciando a probabilidade de propagação do fogo na direção do vento:
           - **Velocidade do Vento (km/h)**: Quanto maior a velocidade do vento, maior a probabilidade de propagação do fogo.
@@ -354,7 +372,7 @@ def main():
         'densidade_vegetacao': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
         'umidade_combustivel': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
         'topografia': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
-        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso']),
+        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso', 'argiloso']),
         'ndvi': st.sidebar.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
         'intensidade_fogo': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
         'tempo_desde_ultimo_fogo': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
@@ -362,17 +380,12 @@ def main():
         'ruido': st.sidebar.slider('Ruído (%)', 1, 100, 10)
     }
 
-    # Carregar dados históricos se existir
-    try:
-        df_historico_csv = pd.read_csv('historico_simulacoes.csv')
-    except FileNotFoundError:
-        df_historico_csv = pd.DataFrame()
-
-    # Entrada para dados históricos manuais
-    with st.sidebar.expander("Inserir dados históricos manuais"):
-        periodo = st.selectbox("Período dos dados", ["anos", "meses", "semanas", "dias"])
-        historico_manual = []
-        for i in range(10):
+    # Coleta dados históricos manuais
+    historico_manual = []
+    if st.sidebar.checkbox('Adicionar dados históricos manuais'):
+        num_registros = st.sidebar.number_input('Número de registros históricos', min_value=1, max_value=10, value=5)
+        for i in range(num_registros):
+            st.write(f"Registro {i+1}")
             registro = {
                 'temperatura': st.number_input(f'Temperatura (°C) - {i+1}', 0, 50, 30),
                 'umidade': st.number_input(f'Umidade relativa (%) - {i+1}', 0, 100, 40),
@@ -384,7 +397,7 @@ def main():
                 'densidade_vegetacao': st.number_input(f'Densidade Vegetal (%) - {i+1}', 0, 100, 70),
                 'umidade_combustivel': st.number_input(f'Teor de umidade do combustível (%) - {i+1}', 0, 100, 10),
                 'topografia': st.number_input(f'Topografia (inclinação em graus) - {i+1}', 0, 45, 5),
-                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso']),
+                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso', 'argiloso']),
                 'ndvi': st.number_input(f'NDVI (Índice de Vegetação por Diferença Normalizada) - {i+1}', 0.0, 1.0, 0.6),
                 'intensidade_fogo': st.number_input(f'Intensidade do Fogo (kW/m) - {i+1}', 0, 10000, 5000),
                 'tempo_desde_ultimo_fogo': st.number_input(f'Tempo desde o último incêndio (anos) - {i+1}', 0, 100, 10),
@@ -392,9 +405,10 @@ def main():
                 'ruido': st.number_input(f'Ruído (%) - {i+1}', 1, 100, 10)
             }
             historico_manual.append(registro)
-        
-        df_historico_manual = pd.DataFrame(historico_manual)
-    
+
+    # Converter dados históricos manuais para DataFrame
+    df_historico_manual = pd.DataFrame(historico_manual)
+
     # Tamanho da grade e número de passos
     tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
     num_passos = st.sidebar.slider('Número de passos', 10, 200, 100)
@@ -405,12 +419,19 @@ def main():
         simulacao = executar_simulacao(tamanho_grade, num_passos, inicio_fogo, params, ruido)
         plotar_simulacao(simulacao, inicio_fogo, params['direcao_vento'])
         plotar_histogramas_e_erros(simulacao)
-        realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
+        correlacao_spearman, f_val, p_val, valores_q_exponencial, matriz_confusao = realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
 
-        # Salvar novos parâmetros no histórico
-        df_novos_parametros = pd.DataFrame([params])
-        df_historico_csv = pd.concat([df_historico_csv, df_novos_parametros], ignore_index=True)
-        df_historico_csv.to_csv('historico_simulacoes.csv', index=False)
+        resultados = {
+            "Matriz de Correlação (Spearman)": correlacao_spearman.to_string(),
+            "F-valor ANOVA": f_val,
+            "p-valor ANOVA": p_val,
+            "Valores Q-Exponencial": valores_q_exponencial.to_string(),
+            "Matriz de Confusão": matriz_confusao.tolist()
+        }
+
+        if st.button('Baixar Resultados como PDF'):
+            pdf_bytes = gerar_pdf(resultados)
+            st.download_button(label="Baixar PDF", data=pdf_bytes, file_name="resultados_simulacao.pdf", mime="application/pdf")
 
 if __name__ == "__main__":
     main()
