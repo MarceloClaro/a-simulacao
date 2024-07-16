@@ -7,11 +7,6 @@ from scipy import stats
 from sklearn.metrics import confusion_matrix
 import pandas as pd
 
-# Inicializa a sessão do Spark
-from pyspark.sql import SparkSession
-
-spark = SparkSession.builder.appName("EcoSim.ai").getOrCreate()
-
 # Define estados das células
 VIVO = 0        # Célula viva (verde)
 QUEIMANDO1 = 1  # Célula começando a queimar (amarelo)
@@ -37,9 +32,9 @@ valores_tipo_vegetacao = {
     'floresta': 1.0
 }
 
+# Atribui valores numéricos ao tipo de solo
 valores_tipo_solo = {
     'arenoso': 0.5,
-    'argiloso': 0.75,
     'argiloso': 1.0
 }
 
@@ -216,11 +211,11 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
     
     valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
 
-    # Inclui dados históricos manuais, se houver
+    # Adiciona dados históricos manuais
     if not df_historico_manual.empty:
-        df_historico_manual = df_historico_manual.apply(pd.to_numeric, errors='coerce').dropna()
+        df_historico_manual = df_historico_manual.apply(pd.to_numeric, errors='coerce')
         valores_params = pd.concat([valores_params, df_historico_manual], ignore_index=True)
-
+    
     # Correlação de Spearman
     correlacao_spearman = valores_params.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
@@ -326,7 +321,7 @@ def main():
           - **Teor de umidade do combustível (%)**: Quanto menor a umidade do combustível, maior a probabilidade de propagação do fogo.
           - **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
           - **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
-          - **Tipo de solo**: Diferentes tipos de solo influenciam a propagação do fogo de forma diferente.
+          - **Tipo de solo**: Diferentes tipos de solo têm diferentes probabilidades base de pegar fogo.
 
         - **W_{effect}(i, j)**: Este fator é calculado com base na direção e velocidade do vento, influenciando a probabilidade de propagação do fogo na direção do vento:
           - **Velocidade do Vento (km/h)**: Quanto maior a velocidade do vento, maior a probabilidade de propagação do fogo.
@@ -359,7 +354,7 @@ def main():
         'densidade_vegetacao': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
         'umidade_combustivel': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
         'topografia': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
-        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso', 'argiloso']),
+        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso']),
         'ndvi': st.sidebar.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
         'intensidade_fogo': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
         'tempo_desde_ultimo_fogo': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
@@ -367,16 +362,17 @@ def main():
         'ruido': st.sidebar.slider('Ruído (%)', 1, 100, 10)
     }
 
-    # Entrada de dados históricos manuais
-    st.sidebar.markdown("### Coleta de dados históricos manuais")
-    historico_manual = []
+    # Carregar dados históricos se existir
+    try:
+        df_historico_csv = pd.read_csv('historico_simulacoes.csv')
+    except FileNotFoundError:
+        df_historico_csv = pd.DataFrame()
 
+    # Entrada para dados históricos manuais
     with st.sidebar.expander("Inserir dados históricos manuais"):
-        periodo = st.selectbox("Selecione o período dos dados:", ["anos", "meses", "semanas", "dias"])
-        num_registros = 10
-
-        for i in range(num_registros):
-            st.markdown(f"**Registro {i+1}**")
+        periodo = st.selectbox("Período dos dados", ["anos", "meses", "semanas", "dias"])
+        historico_manual = []
+        for i in range(10):
             registro = {
                 'temperatura': st.number_input(f'Temperatura (°C) - {i+1}', 0, 50, 30),
                 'umidade': st.number_input(f'Umidade relativa (%) - {i+1}', 0, 100, 40),
@@ -388,7 +384,7 @@ def main():
                 'densidade_vegetacao': st.number_input(f'Densidade Vegetal (%) - {i+1}', 0, 100, 70),
                 'umidade_combustivel': st.number_input(f'Teor de umidade do combustível (%) - {i+1}', 0, 100, 10),
                 'topografia': st.number_input(f'Topografia (inclinação em graus) - {i+1}', 0, 45, 5),
-                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso', 'argiloso']),
+                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso']),
                 'ndvi': st.number_input(f'NDVI (Índice de Vegetação por Diferença Normalizada) - {i+1}', 0.0, 1.0, 0.6),
                 'intensidade_fogo': st.number_input(f'Intensidade do Fogo (kW/m) - {i+1}', 0, 10000, 5000),
                 'tempo_desde_ultimo_fogo': st.number_input(f'Tempo desde o último incêndio (anos) - {i+1}', 0, 100, 10),
@@ -396,16 +392,9 @@ def main():
                 'ruido': st.number_input(f'Ruído (%) - {i+1}', 1, 100, 10)
             }
             historico_manual.append(registro)
-
-    # Convertendo dados históricos manuais para DataFrame do PySpark
-    if historico_manual:
+        
         df_historico_manual = pd.DataFrame(historico_manual)
-        df_historico_manual['tipo_vegetacao'] = df_historico_manual['tipo_vegetacao'].map(valores_tipo_vegetacao)
-        df_historico_manual['tipo_solo'] = df_historico_manual['tipo_solo'].map(valores_tipo_solo)
-        df_historico_manual = spark.createDataFrame(df_historico_manual)
-    else:
-        df_historico_manual = spark.createDataFrame([], schema=df_historico_manual.schema)
-
+    
     # Tamanho da grade e número de passos
     tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
     num_passos = st.sidebar.slider('Número de passos', 10, 200, 100)
@@ -417,6 +406,11 @@ def main():
         plotar_simulacao(simulacao, inicio_fogo, params['direcao_vento'])
         plotar_histogramas_e_erros(simulacao)
         realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
+
+        # Salvar novos parâmetros no histórico
+        df_novos_parametros = pd.DataFrame([params])
+        df_historico_csv = pd.concat([df_historico_csv, df_novos_parametros], ignore_index=True)
+        df_historico_csv.to_csv('historico_simulacoes.csv', index=False)
 
 if __name__ == "__main__":
     main()
