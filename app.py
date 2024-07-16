@@ -6,6 +6,7 @@ from matplotlib.colors import ListedColormap
 from scipy import stats
 from sklearn.metrics import confusion_matrix
 import pandas as pd
+from fpdf import FPDF
 
 # Define estados das células
 VIVO = 0        # Célula viva (verde)
@@ -254,6 +255,19 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
 
     return correlacao_spearman, f_val, p_val, valores_q_exponencial, matriz_confusao
 
+# Função para gerar e baixar PDF
+def gerar_pdf(resultados):
+    pdf = FPDF()
+    pdf.add_page()
+
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Resultados da Simulação de Propagação de Incêndio", ln=True, align='C')
+    
+    for key, value in resultados.items():
+        pdf.multi_cell(0, 10, f"{key}: {value}")
+
+    return pdf.output(dest='S').encode('latin1')
+
 # Função principal para a interface do Streamlit
 def main():
     st.set_page_config(page_title="EcoSim.ai - Simulador de Propagação de Incêndio", page_icon="🔥")
@@ -428,9 +442,8 @@ def main():
             "Matriz de Confusão": matriz_confusao.tolist()
         }
 
-        if st.button('Baixar Resultados como PDF'):
-            pdf_bytes = gerar_pdf(resultados)
-            st.download_button(label="Baixar PDF", data=pdf_bytes, file_name="resultados_simulacao.pdf", mime="application/pdf")
+        pdf_bytes = gerar_pdf(resultados)
+        st.download_button(label="Baixar PDF", data=pdf_bytes, file_name="resultados_simulacao.pdf", mime="application/pdf")
 
 if __name__ == "__main__":
     main()
