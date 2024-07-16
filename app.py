@@ -6,11 +6,7 @@ from matplotlib.colors import ListedColormap
 from scipy import stats
 from sklearn.metrics import confusion_matrix
 import pandas as pd
-
-# Inicializa a sessão do Spark
-from pyspark.sql import SparkSession
-
-spark = SparkSession.builder.appName("EcoSim.ai").getOrCreate()
+import os
 
 # Define estados das células
 VIVO = 0        # Célula viva (verde)
@@ -30,7 +26,7 @@ probabilidades = {
     QUEIMADO: 0      # Uma célula queimada não pode pegar fogo novamente
 }
 
-# Atribui valores numéricos ao tipo de vegetação
+# Atribui valores numéricos ao tipo de vegetação e solo
 valores_tipo_vegetacao = {
     'pastagem': 0.5,
     'matagal': 0.75,
@@ -205,7 +201,6 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
         'densidade_vegetacao': params['densidade_vegetacao'],
         'umidade_combustivel': params['umidade_combustivel'],
         'topografia': params['topografia'],
-        'tipo_vegetacao': valores_tipo_vegetacao[params['tipo_vegetacao']],
         'tipo_solo': valores_tipo_solo[params['tipo_solo']],
         'ndvi': params['ndvi'],
         'intensidade_fogo': params['intensidade_fogo'],
@@ -216,11 +211,13 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
     
     valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
 
-    # Inclui dados históricos manuais, se houver
+    # Adicionar dados históricos manuais se disponíveis
     if not df_historico_manual.empty:
-        df_historico_manual = df_historico_manual.apply(pd.to_numeric, errors='coerce').dropna()
         valores_params = pd.concat([valores_params, df_historico_manual], ignore_index=True)
 
+    # Corrigir tipos de dados para garantir compatibilidade na correlação
+    valores_params = valores_params.apply(pd.to_numeric, errors='coerce')
+    
     # Correlação de Spearman
     correlacao_spearman = valores_params.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
@@ -326,7 +323,7 @@ def main():
           - **Teor de umidade do combustível (%)**: Quanto menor a umidade do combustível, maior a probabilidade de propagação do fogo.
           - **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
           - **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
-          - **Tipo de solo**: Diferentes tipos de solo influenciam a propagação do fogo de forma diferente.
+          - **Tipo de solo**: Diferentes tipos de solo têm diferentes probabilidades base de pegar fogo.
 
         - **W_{effect}(i, j)**: Este fator é calculado com base na direção e velocidade do vento, influenciando a probabilidade de propagação do fogo na direção do vento:
           - **Velocidade do Vento (km/h)**: Quanto maior a velocidade do vento, maior a probabilidade de propagação do fogo.
@@ -367,16 +364,12 @@ def main():
         'ruido': st.sidebar.slider('Ruído (%)', 1, 100, 10)
     }
 
-    # Entrada de dados históricos manuais
-    st.sidebar.markdown("### Coleta de dados históricos manuais")
+    # Entrada manual de dados históricos
+    st.sidebar.subheader("Entrada Manual de Dados Históricos")
     historico_manual = []
-
-    with st.sidebar.expander("Inserir dados históricos manuais"):
-        periodo = st.selectbox("Selecione o período dos dados:", ["anos", "meses", "semanas", "dias"])
-        num_registros = 10
-
-        for i in range(num_registros):
-            st.markdown(f"**Registro {i+1}**")
+    if st.sidebar.checkbox("Adicionar dados históricos manualmente"):
+        periodo = st.sidebar.selectbox("Período dos dados", ["anos", "meses", "semanas", "dias"])
+        for i in range(1, 11):
             registro = {
                 'temperatura': st.number_input(f'Temperatura (°C) - {i+1}', 0, 50, 30),
                 'umidade': st.number_input(f'Umidade relativa (%) - {i+1}', 0, 100, 40),
@@ -389,22 +382,13 @@ def main():
                 'umidade_combustivel': st.number_input(f'Teor de umidade do combustível (%) - {i+1}', 0, 100, 10),
                 'topografia': st.number_input(f'Topografia (inclinação em graus) - {i+1}', 0, 45, 5),
                 'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso', 'argiloso']),
-                'ndvi': st.number_input(f'NDVI (Índice de Vegetação por Diferença Normalizada) - {i+1}', 0.0, 1.0, 0.6),
+                'ndvi': st.number_input(f'NDVI - {i+1}', 0.0, 1.0, 0.6),
                 'intensidade_fogo': st.number_input(f'Intensidade do Fogo (kW/m) - {i+1}', 0, 10000, 5000),
                 'tempo_desde_ultimo_fogo': st.number_input(f'Tempo desde o último incêndio (anos) - {i+1}', 0, 100, 10),
                 'intervencao_humana': st.number_input(f'Fator de Intervenção Humana (escala 0-1) - {i+1}', 0.0, 1.0, 0.2),
                 'ruido': st.number_input(f'Ruído (%) - {i+1}', 1, 100, 10)
             }
             historico_manual.append(registro)
-
-    # Convertendo dados históricos manuais para DataFrame do PySpark
-    if historico_manual:
-        df_historico_manual = pd.DataFrame(historico_manual)
-        df_historico_manual['tipo_vegetacao'] = df_historico_manual['tipo_vegetacao'].map(valores_tipo_vegetacao)
-        df_historico_manual['tipo_solo'] = df_historico_manual['tipo_solo'].map(valores_tipo_solo)
-        df_historico_manual = spark.createDataFrame(df_historico_manual)
-    else:
-        df_historico_manual = spark.createDataFrame([], schema=df_historico_manual.schema)
 
     # Tamanho da grade e número de passos
     tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
@@ -415,7 +399,7 @@ def main():
         ruido = params['ruido']
         simulacao = executar_simulacao(tamanho_grade, num_passos, inicio_fogo, params, ruido)
         plotar_simulacao(simulacao, inicio_fogo, params['direcao_vento'])
-        plotar_histogramas_e_erros(simulacao)
+        df_historico_manual = pd.DataFrame(historico_manual)
         realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
 
 if __name__ == "__main__":
