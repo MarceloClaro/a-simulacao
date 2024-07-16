@@ -6,7 +6,6 @@ from matplotlib.colors import ListedColormap
 from scipy import stats
 from sklearn.metrics import confusion_matrix
 import pandas as pd
-import os
 
 # Define estados das células
 VIVO = 0        # Célula viva (verde)
@@ -26,7 +25,7 @@ probabilidades = {
     QUEIMADO: 0      # Uma célula queimada não pode pegar fogo novamente
 }
 
-# Atribui valores numéricos ao tipo de vegetação e solo
+# Atribui valores numéricos ao tipo de vegetação
 valores_tipo_vegetacao = {
     'pastagem': 0.5,
     'matagal': 0.75,
@@ -186,7 +185,7 @@ def plotar_histogramas_e_erros(simulacao):
     st.pyplot(fig)
 
 # Função para calcular correlações e realizar ANOVA, Q-Exponential e matriz de confusão
-def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
+def realizar_estatisticas_avancadas(simulacao, params, historico_manual):
     contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
     contagem_queimando_df = pd.DataFrame(contagem_queimando, columns=["Células Queimando"])
 
@@ -211,13 +210,13 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
     
     valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
 
-    # Adicionar dados históricos manuais se disponíveis
-    if not df_historico_manual.empty:
-        valores_params = pd.concat([valores_params, df_historico_manual], ignore_index=True)
+    # Adiciona dados históricos manuais, se houver
+    if not historico_manual.empty:
+        valores_params = pd.concat([valores_params, historico_manual], ignore_index=True)
 
-    # Corrigir tipos de dados para garantir compatibilidade na correlação
+    # Trata valores não numéricos
     valores_params = valores_params.apply(pd.to_numeric, errors='coerce')
-    
+
     # Correlação de Spearman
     correlacao_spearman = valores_params.corr(method='spearman')
     st.write("### Matriz de Correlação (Spearman):")
@@ -323,7 +322,6 @@ def main():
           - **Teor de umidade do combustível (%)**: Quanto menor a umidade do combustível, maior a probabilidade de propagação do fogo.
           - **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
           - **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
-          - **Tipo de solo**: Diferentes tipos de solo têm diferentes probabilidades base de pegar fogo.
 
         - **W_{effect}(i, j)**: Este fator é calculado com base na direção e velocidade do vento, influenciando a probabilidade de propagação do fogo na direção do vento:
           - **Velocidade do Vento (km/h)**: Quanto maior a velocidade do vento, maior a probabilidade de propagação do fogo.
@@ -365,11 +363,11 @@ def main():
     }
 
     # Entrada manual de dados históricos
-    st.sidebar.subheader("Entrada Manual de Dados Históricos")
+    periodo = st.sidebar.selectbox("Período dos últimos registros", ["anos", "meses", "semanas", "dias"])
     historico_manual = []
     if st.sidebar.checkbox("Adicionar dados históricos manualmente"):
-        periodo = st.sidebar.selectbox("Período dos dados", ["anos", "meses", "semanas", "dias"])
-        for i in range(1, 11):
+        for i in range(10):
+            st.sidebar.markdown(f"### Registro {i+1}")
             registro = {
                 'temperatura': st.number_input(f'Temperatura (°C) - {i+1}', 0, 50, 30),
                 'umidade': st.number_input(f'Umidade relativa (%) - {i+1}', 0, 100, 40),
@@ -385,10 +383,13 @@ def main():
                 'ndvi': st.number_input(f'NDVI - {i+1}', 0.0, 1.0, 0.6),
                 'intensidade_fogo': st.number_input(f'Intensidade do Fogo (kW/m) - {i+1}', 0, 10000, 5000),
                 'tempo_desde_ultimo_fogo': st.number_input(f'Tempo desde o último incêndio (anos) - {i+1}', 0, 100, 10),
-                'intervencao_humana': st.number_input(f'Fator de Intervenção Humana (escala 0-1) - {i+1}', 0.0, 1.0, 0.2),
-                'ruido': st.number_input(f'Ruído (%) - {i+1}', 1, 100, 10)
+                'intervencao_humana': st.number_input(f'Intervenção Humana - {i+1}', 0.0, 1.0, 0.2),
+                'ruido': st.number_input(f'Ruído (%) - {i+1}', 1, 100, 10),
+                'Células Queimando': st.number_input(f'Células Queimando - {i+1}', 0, 2500, 100)
             }
             historico_manual.append(registro)
+
+    df_historico_manual = pd.DataFrame(historico_manual)
 
     # Tamanho da grade e número de passos
     tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
@@ -399,8 +400,13 @@ def main():
         ruido = params['ruido']
         simulacao = executar_simulacao(tamanho_grade, num_passos, inicio_fogo, params, ruido)
         plotar_simulacao(simulacao, inicio_fogo, params['direcao_vento'])
-        df_historico_manual = pd.DataFrame(historico_manual)
+        plotar_histogramas_e_erros(simulacao)
         realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
+
+    # Adiciona botão de download dos resultados
+    if st.button('Imprimir Resultados'):
+        resultados = st.session_state.get('resultados', 'Não há resultados disponíveis.')
+        st.download_button('Baixar Resultados', data=resultados, file_name='resultados.txt', mime='text/plain')
 
 if __name__ == "__main__":
     main()
