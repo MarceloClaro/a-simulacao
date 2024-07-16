@@ -383,7 +383,7 @@ def main():
     # Coleta dados históricos manuais
     historico_manual = []
     if st.sidebar.checkbox('Adicionar dados históricos manuais'):
-        num_registros = st.sidebar.number_input('Número de registros históricos', min_value=1, max_value=10, value=5)
+        num_registros = st.sidebar.number_input('Número de registros históricos', min_value=1, max_value=1000, value=3)
         for i in range(num_registros):
             st.write(f"Registro {i+1}")
             registro = {
@@ -413,6 +413,19 @@ def main():
     tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
     num_passos = st.sidebar.slider('Número de passos', 10, 200, 100)
 
+    # Informações de contato
+    st.sidebar.image("eu.ico", width=80)
+    st.sidebar.write("""
+    Projeto Geomaker + IA 
+    - Professor: Marcelo Claro.
+
+    Contatos: marceloclaro@gmail.com
+
+    Whatsapp: (88)981587145
+
+    Instagram: [https://www.instagram.com/marceloclaro.geomaker/](https://www.instagram.com/marceloclaro.geomaker/)
+    """)
+
     if st.button('Executar Simulação'):
         inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
         ruido = params['ruido']
@@ -429,9 +442,9 @@ def main():
             "Matriz de Confusão": matriz_confusao.tolist()
         }
 
-        if st.button('Baixar Resultados como PDF'):
-            pdf_bytes = gerar_pdf(resultados)
-            st.download_button(label="Baixar PDF", data=pdf_bytes, file_name="resultados_simulacao.pdf", mime="application/pdf")
+
+
+
 
 if __name__ == "__main__":
     main()
