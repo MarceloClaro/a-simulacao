@@ -31,7 +31,7 @@ valores_tipo_vegetacao = {
     'pastagem': 0.4,
     'matagal': 0.6,
     'floresta Decídua': 0.8,
-    'floresta tropical': 1.0
+    'floresta Tropical': 1.0
 }
 
 # Atribui valores numéricos ao tipo de solo
@@ -342,36 +342,41 @@ def main():
           - **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
           - **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
           - **Tipo de solo**: Diferentes tipos de solo influenciam a probabilidade de propagação do fogo.
+          - **NDVI**: Define o índice de vegetação por diferença normalizada.
+          - **Intensidade do Fogo (kW/m)**: Define a intensidade do fogo.
+          - **Tempo desde o último incêndio (anos)**: Define o tempo desde o último incêndio.
+          - **Fator de Intervenção Humana**: Define a intervenção humana na propagação do fogo.
+          - **Ruído (%)**: Define a aleatoriedade no modelo de propagação do fogo.
 
         ### Estatísticas e Interpretações
         A simulação permite observar como o fogo se propaga em diferentes condições ambientais. Os resultados podem ser utilizados para entender o comportamento do fogo e planejar estratégias de manejo e controle de incêndios.
 
         ### Análises Estatísticas
-        
+
         #### Histogramas
         Um histograma é um gráfico de barras que mostra a frequência com que algo acontece. Imagine que estamos observando quantas árvores estão pegando fogo em uma floresta a cada dia durante um mês. No nosso simulador de fogo, um histograma nos ajuda a visualizar quantas células (pedaços de terreno) estão queimando em cada etapa do tempo da simulação. Por exemplo, se temos 10 células queimando no primeiro dia, 15 no segundo e assim por diante, o histograma mostrará essas contagens como barras, permitindo ver como o fogo se espalha ao longo do tempo.
-        
+
         #### Gráficos de Margem de Erro
         Um gráfico de margem de erro mostra a média de um conjunto de dados e a variação ao redor dessa média. A média é como calcular a "nota média" de uma turma de alunos. No caso do nosso simulador, a média seria o número médio de células queimando a cada dia. A margem de erro indica o quanto esses números podem variar em torno da média. Se a margem de erro é pequena, significa que os números estão próximos da média; se é grande, significa que os números variam bastante. Isso ajuda a entender a consistência da propagação do fogo.
-        
+
         #### Correlação de Spearman
         Correlação de Spearman é uma forma de medir a relação entre duas coisas sem assumir que essa relação seja linear. Por exemplo, podemos usar a correlação de Spearman para ver se existe uma relação entre a temperatura e a velocidade do fogo. Se a correlação for alta, significa que quando uma dessas variáveis aumenta, a outra também tende a aumentar (ou diminuir). Por exemplo, se a temperatura aumenta e o fogo se espalha mais rapidamente, isso indicaria uma alta correlação positiva.
-        
+
         #### ANOVA
         ANOVA, ou Análise de Variância, é um teste estatístico que compara as médias de diferentes grupos para ver se há diferenças significativas entre eles. No contexto do simulador de fogo, podemos usar ANOVA para comparar diferentes cenários, como a propagação do fogo em diferentes tipos de vegetação (pastagem, matagal, floresta). Se os resultados mostram que há uma diferença significativa (um p-valor muito pequeno, como 2.1937988526058356e-30), significa que a propagação do fogo varia significativamente entre os tipos de vegetação.
-        
-        #### Estatística Q
-        A Estatística Q é uma maneira de medir a relação entre variáveis em um contexto onde há dependência ou não linearidade entre elas. No contexto da propagação do fogo, a Estatística Q pode ajudar a entender como diferentes fatores (como temperatura, umidade, velocidade do vento) se combinam de maneiras complexas para influenciar a propagação do fogo. Em outras palavras, é uma ferramenta que nos ajuda a explorar e interpretar a complexidade dos dados que não seguem padrões simples.
-        
+
+        #### Q-Exponential
+        A distribuição Q-Exponencial é uma maneira de modelar dados que não seguem uma distribuição normal. É útil quando estamos lidando com fenômenos complexos como a propagação do fogo, onde os eventos não acontecem de maneira previsível. Este método nos ajuda a entender melhor a distribuição dos dados em situações complexas. Por exemplo, os valores Q-Exponencial para o número de células queimando podem mostrar uma distribuição que não é simétrica, indicando que há dias em que o fogo se espalha muito mais rápido do que em outros.
+
         #### Matriz de Confusão
         Uma matriz de confusão é uma tabela usada para avaliar a performance de um modelo de classificação. No nosso simulador de fogo, a matriz de confusão mostra quantas vezes o modelo previu corretamente (ou incorretamente) o estado de uma célula (se estava intacta, queimando ou queimada). É como uma tabela que mostra quantas vezes um aluno acertou ou errou diferentes tipos de perguntas em uma prova. Por exemplo, se a matriz de confusão mostra que 243191 células foram corretamente identificadas como intactas e 126 células foram corretamente identificadas em cada estágio de queima, mas algumas previsões foram incorretas, isso nos ajuda a entender se o modelo está funcionando bem ou se precisa de ajustes.
-        
+
         Exemplo de Matriz de Confusão:
           - [[243191, 129, 0, 0, 0, 0], [0, 0, 126, 0, 0, 0], [0, 0, 0, 126, 0, 0], [0, 0, 0, 0, 126, 0], [0, 0, 0, 0, 0, 126], [0, 0, 0, 0, 0, 6176]]
           - 243191 células foram corretamente identificadas como intactas.
           - 126 células foram corretamente identificadas em cada estágio de queima.
           - Alguns erros de previsão (129 células foram incorretamente identificadas como queimando quando não estavam).
-        
+
         Essas análises estatísticas são importantes para entender melhor como o fogo se propaga e para melhorar a precisão do nosso simulador.
         """)
 
@@ -383,11 +388,11 @@ def main():
         'direcao_vento': st.sidebar.slider('Direção do Vento (graus)', 0, 360, 90),
         'precipitacao': st.sidebar.slider('Precipitação (mm/dia)', 0, 200, 0),
         'radiacao_solar': st.sidebar.slider('Radiação Solar (W/m²)', 0, 1200, 800),
-        'tipo_vegetacao': st.sidebar.selectbox('Tipo de vegetação', ['pastagem', 'matagal', 'floresta']),
+        'tipo_vegetacao': st.sidebar.selectbox('Tipo de vegetação', list(valores_tipo_vegetacao.keys())),
         'densidade_vegetacao': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
         'umidade_combustivel': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
         'topografia': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
-        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso']),
+        'tipo_solo': st.sidebar.selectbox('Tipo de solo', list(valores_tipo_solo.keys())),
         'ndvi': st.sidebar.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
         'intensidade_fogo': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
         'tempo_desde_ultimo_fogo': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
@@ -408,11 +413,11 @@ def main():
                 'direcao_vento': st.number_input(f'Direção do Vento (graus) - {i+1}', 0, 360, 90),
                 'precipitacao': st.number_input(f'Precipitação (mm/dia) - {i+1}', 0, 200, 0),
                 'radiacao_solar': st.number_input(f'Radiação Solar (W/m²) - {i+1}', 0, 1200, 800),
-                'tipo_vegetacao': st.selectbox(f'Tipo de vegetação - {i+1}', ['pastagem', 'matagal', 'floresta']),
+                'tipo_vegetacao': st.selectbox(f'Tipo de vegetação - {i+1}', list(valores_tipo_vegetacao.keys())),
                 'densidade_vegetacao': st.number_input(f'Densidade Vegetal (%) - {i+1}', 0, 100, 70),
                 'umidade_combustivel': st.number_input(f'Teor de umidade do combustível (%) - {i+1}', 0, 100, 10),
                 'topografia': st.number_input(f'Topografia (inclinação em graus) - {i+1}', 0, 45, 5),
-                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso']),
+                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', list(valores_tipo_solo.keys())),
                 'ndvi': st.number_input(f'NDVI (Índice de Vegetação por Diferença Normalizada) - {i+1}', 0.0, 1.0, 0.6),
                 'intensidade_fogo': st.number_input(f'Intensidade do Fogo (kW/m) - {i+1}', 0, 10000, 5000),
                 'tempo_desde_ultimo_fogo': st.number_input(f'Tempo desde o último incêndio (anos) - {i+1}', 0, 100, 10),
