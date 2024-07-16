@@ -542,7 +542,6 @@ def main():
 
     Instagram: [https://www.instagram.com/marceloclaro.geomaker/](https://www.instagram.com/marceloclaro.geomaker/)
     """)
-    #_____________________________________________________________________
     #_________________________________________________________________
     import streamlit as st
     import base64
@@ -582,6 +581,8 @@ def main():
             except FileNotFoundError:
                 audio_placeholder.error(f"Arquivo {mp3_path} não encontrado.")
         #_____________________________________________________________________
+    #_____________________________________________________________________
+
 
     if st.button('Executar Simulação'):
         inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
