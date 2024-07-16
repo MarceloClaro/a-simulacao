@@ -372,7 +372,7 @@ def main():
         'densidade_vegetacao': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
         'umidade_combustivel': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
         'topografia': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
-        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso', 'argiloso']),
+        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'argiloso']),
         'ndvi': st.sidebar.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
         'intensidade_fogo': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
         'tempo_desde_ultimo_fogo': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
@@ -397,7 +397,7 @@ def main():
                 'densidade_vegetacao': st.number_input(f'Densidade Vegetal (%) - {i+1}', 0, 100, 70),
                 'umidade_combustivel': st.number_input(f'Teor de umidade do combustível (%) - {i+1}', 0, 100, 10),
                 'topografia': st.number_input(f'Topografia (inclinação em graus) - {i+1}', 0, 45, 5),
-                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso', 'argiloso']),
+                'tipo_solo': st.selectbox(f'Tipo de solo - {i+1}', ['arenoso', 'argiloso']),
                 'ndvi': st.number_input(f'NDVI (Índice de Vegetação por Diferença Normalizada) - {i+1}', 0.0, 1.0, 0.6),
                 'intensidade_fogo': st.number_input(f'Intensidade do Fogo (kW/m) - {i+1}', 0, 10000, 5000),
                 'tempo_desde_ultimo_fogo': st.number_input(f'Tempo desde o último incêndio (anos) - {i+1}', 0, 100, 10),
@@ -429,7 +429,9 @@ def main():
             "Matriz de Confusão": matriz_confusao.tolist()
         }
 
-        
+        if st.button('Baixar Resultados como PDF'):
+            pdf_bytes = gerar_pdf(resultados)
+            st.download_button(label="Baixar PDF", data=pdf_bytes, file_name="resultados_simulacao.pdf", mime="application/pdf")
 
 if __name__ == "__main__":
     main()
