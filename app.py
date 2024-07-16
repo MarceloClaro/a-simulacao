@@ -242,18 +242,12 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
     st.write(valores_q_exponencial)
 
     # Estatística Q
-    def calcular_estatistica_q(valores, q):
-        q_media = np.mean(valores_q_exponencial)
-        q_var = np.var(valores_q_exponencial)
-        return q_media, q_var
-    
-    q_media, q_var = calcular_estatistica_q(contagem_queimando_df["Células Queimando"], q_valor)
-    estatistica_q = pd.DataFrame({
-        'Q-Média': [q_media],
-        'Q-Variância': [q_var]
-    })
-    st.write("### Estatística Q:")
-    st.write(estatistica_q)
+    def q_estatistica(valores, q):
+        return np.sum((valores_q_exponencial - np.mean(valores_q_exponencial))**2) / len(valores_q_exponencial)
+
+    valores_q_estatistica = q_estatistica(contagem_queimando_df["Células Queimando"], q_valor)
+    st.write("### Valores Q-Estatística:")
+    st.write(valores_q_estatistica)
 
     # Matriz de Confusão
     y_true = np.concatenate([grade.flatten() for grade in simulacao[:-1]])
@@ -269,7 +263,7 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
     ax.set_title('Matriz de Confusão')
     st.pyplot(fig)
 
-    return correlacao_spearman, f_val, p_val, valores_q_exponencial, estatistica_q, matriz_confusao
+    return correlacao_spearman, f_val, p_val, valores_q_exponencial, valores_q_estatistica, matriz_confusao
 
 # Função para gerar e baixar PDF
 def gerar_pdf(resultados):
@@ -460,14 +454,14 @@ def main():
         Correlação de Spearman é uma forma de medir a relação entre duas coisas sem assumir que essa relação seja linear. Por exemplo, podemos usar a correlação de Spearman para ver se existe uma relação entre a temperatura e a velocidade do fogo. Se a correlação for alta, significa que quando uma dessas variáveis aumenta, a outra também tende a aumentar (ou diminuir). Por exemplo, se a temperatura aumenta e o fogo se espalha mais rapidamente, isso indicaria uma alta correlação positiva.
         
         #### ANOVA
-        ANOVA, ou Análise de Variância, é um teste estatístico que compara as médias de diferentes grupos para ver se há diferenças significativas entre eles. No contexto do simulador de fogo, podemos usar ANOVA para comparar diferentes cenários, como a propagação do fogo em diferentes tipos de vegetação (pastagem, matagal, floresta). Se os resultados mostram que há uma diferença significativa (um p-valor muito pequeno, como 2.1937988526058356e-30), significa que a propagação do fogo varia significativamente entre os tipos de vegetação.
+        ANOVA, ou Análise de Variância, é um teste estatístico que compara as médias de diferentes grupos para ver se há diferenças significativas entre eles. No contexto do simulador de fogo, podemos usar ANOVA para comparar diferentes cenários, como a propagação do fogo em diferentes tipos de vegetação (pastagem, matagal, floresta). Se os resultados mostram que há uma diferença significativa (um p-valor muito pequeno, como 1.0700732830108085e-21), significa que a propagação do fogo varia significativamente entre os tipos de vegetação.
         
         #### Q-Exponential
         A distribuição Q-Exponencial é uma maneira de modelar dados que não seguem uma distribuição normal. É útil quando estamos lidando com fenômenos complexos como a propagação do fogo, onde os eventos não acontecem de maneira previsível. Este método nos ajuda a entender melhor a distribuição dos dados em situações complexas. Por exemplo, os valores Q-Exponencial para o número de células queimando podem mostrar uma distribuição que não é simétrica, indicando que há dias em que o fogo se espalha muito mais rápido do que em outros.
         
         #### Estatística Q
         A Estatística Q é uma maneira de medir a relação entre variáveis em um contexto onde há dependência ou não linearidade entre elas. No contexto da propagação do fogo, a Estatística Q pode ajudar a entender como diferentes fatores (como temperatura, umidade, velocidade do vento) se combinam de maneiras complexas para influenciar a propagação do fogo. Em outras palavras, é uma ferramenta que nos ajuda a explorar e interpretar a complexidade dos dados que não seguem padrões simples.
-
+        
         #### Matriz de Confusão
         Uma matriz de confusão é uma tabela usada para avaliar a performance de um modelo de classificação. No nosso simulador de fogo, a matriz de confusão mostra quantas vezes o modelo previu corretamente (ou incorretamente) o estado de uma célula (se estava intacta, queimando ou queimada). É como uma tabela que mostra quantas vezes um aluno acertou ou errou diferentes tipos de perguntas em uma prova. Por exemplo, se a matriz de confusão mostra que 243191 células foram corretamente identificadas como intactas e 126 células foram corretamente identificadas em cada estágio de queima, mas algumas previsões foram incorretas, isso nos ajuda a entender se o modelo está funcionando bem ou se precisa de ajustes.
         
@@ -552,14 +546,14 @@ def main():
         simulacao = executar_simulacao(tamanho_grade, num_passos, inicio_fogo, params, ruido)
         plotar_simulacao(simulacao, inicio_fogo, params['direcao_vento'])
         plotar_histogramas_e_erros(simulacao)
-        correlacao_spearman, f_val, p_val, valores_q_exponencial, estatistica_q, matriz_confusao = realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
+        correlacao_spearman, f_val, p_val, valores_q_exponencial, valores_q_estatistica, matriz_confusao = realizar_estatisticas_avancadas(simulacao, params, df_historico_manual)
 
         resultados = {
             "Matriz de Correlação (Spearman)": correlacao_spearman.to_string(),
             "F-valor ANOVA": f_val,
             "p-valor ANOVA": p_val,
             "Valores Q-Exponencial": valores_q_exponencial.to_string(),
-            "Estatística Q": estatistica_q.to_string(),
+            "Valores Q-Estatística": valores_q_estatistica,
             "Matriz de Confusão": matriz_confusao.tolist()
         }
 
