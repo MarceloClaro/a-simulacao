@@ -242,12 +242,16 @@ def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
     st.write(valores_q_exponencial)
 
     # Estatística Q
-    def calcular_estatistica_q(valores):
-        q = 1.5  # Parâmetro de exemplo para a distribuição Q
-        q_valores = q_exponencial(valores, q)
-        return q_valores
-
-    estatistica_q = calcular_estatistica_q(contagem_queimando_df["Células Queimando"])
+    def calcular_estatistica_q(valores, q):
+        q_media = np.mean(valores_q_exponencial)
+        q_var = np.var(valores_q_exponencial)
+        return q_media, q_var
+    
+    q_media, q_var = calcular_estatistica_q(contagem_queimando_df["Células Queimando"], q_valor)
+    estatistica_q = pd.DataFrame({
+        'Q-Média': [q_media],
+        'Q-Variância': [q_var]
+    })
     st.write("### Estatística Q:")
     st.write(estatistica_q)
 
@@ -349,9 +353,97 @@ def main():
           - **Umidade relativa (%)**: Quanto menor a umidade, maior a probabilidade de propagação do fogo.
           - **Densidade Vegetal (%)**: Quanto maior a densidade da vegetação, maior a probabilidade de propagação do fogo.
           - **Teor de umidade do combustível (%)**: Quanto menor a umidade do combustível, maior a probabilidade de propagação do fogo.
+                ### Escala Técnica e Científica para Tipos de Vegetação na Propagação de Fogo
+                Para criar uma escala metodológica tecnicocientífica para os tipos de vegetação na propagação de fogo, consideramos fatores como a inflamabilidade da vegetação, a densidade da biomassa, a capacidade de retenção de umidade, e a estrutura da vegetação. A escala a seguir é baseada em estudos científicos e dados empíricos sobre a propagação de incêndios florestais.
+                
+                #### Critérios de Avaliação
+                1. **Inflamabilidade**: Capacidade da vegetação de pegar fogo rapidamente.
+                2. **Densidade da Biomassa**: Quantidade de matéria orgânica presente na vegetação.
+                3. **Retenção de Umidade**: Capacidade da vegetação de reter água e, portanto, resistir ao fogo.
+                4. **Estrutura da Vegetação**: Complexidade estrutural da vegetação que pode afetar a propagação do fogo.
+                
+                #### Escala de Inflamabilidade da Vegetação
+                
+                ##### 1. Pastagem (0.4)
+                - **Inflamabilidade**: Alta, devido à presença de gramíneas secas que pegam fogo rapidamente.
+                - **Densidade da Biomassa**: Baixa a moderada, com predominância de gramíneas e ervas.
+                - **Retenção de Umidade**: Baixa, gramíneas secam rapidamente e perdem umidade facilmente.
+                - **Estrutura da Vegetação**: Simples, com pouca cobertura de dossel e vegetação rasteira.
+                
+                ##### 2. Matagal (0.6)
+                - **Inflamabilidade**: Moderada a alta, devido à presença de arbustos e plantas herbáceas.
+                - **Densidade da Biomassa**: Moderada, com presença de arbustos densos e alguma cobertura de solo.
+                - **Retenção de Umidade**: Moderada, com plantas que podem reter alguma umidade, mas secam durante períodos de seca.
+                - **Estrutura da Vegetação**: Moderadamente complexa, com vegetação densa que pode facilitar a propagação do fogo.
+                
+                ##### 3. Floresta Decídua (0.8)
+                - **Inflamabilidade**: Moderada, devido à presença de folhas caídas que podem secar e pegar fogo.
+                - **Densidade da Biomassa**: Alta, com grande quantidade de matéria orgânica, incluindo folhas, galhos e troncos.
+                - **Retenção de Umidade**: Alta, devido à presença de árvores que podem reter umidade no solo e na vegetação.
+                - **Estrutura da Vegetação**: Complexa, com várias camadas de vegetação (dossel, sub-bosque, camada de folhagem).
+                
+                ##### 4. Floresta Tropical (1.0)
+                - **Inflamabilidade**: Baixa a moderada, devido à alta umidade, mas pode aumentar durante períodos de seca intensa.
+                - **Densidade da Biomassa**: Muito alta, com grande quantidade de matéria orgânica em todas as camadas da floresta.
+                - **Retenção de Umidade**: Muito alta, devido à alta precipitação e capacidade das plantas de reter umidade.
+                - **Estrutura da Vegetação**: Muito complexa, com múltiplas camadas de vegetação densa, incluindo árvores altas, sub-bosque denso e camada de folhagem espessa.
+                
+                #### Justificativa Científica
+                A escala acima é baseada em princípios ecológicos e estudos de campo que analisam a resposta da vegetação ao fogo. A inflamabilidade da vegetação é influenciada pela composição das espécies, a densidade da biomassa disponível para queima, a umidade retida na vegetação, e a estrutura física da vegetação que pode facilitar ou dificultar a propagação do fogo.
+                
+                - **Referências**:
+                  1. Pyne, S. J., Andrews, P. L., & Laven, R. D. (1996). *Introduction to Wildland Fire*.
+                  2. Bowman, D. M. J. S., Balch, J. K., Artaxo, P., Bond, W. J., Cochrane, M. A., D'Antonio, C. M., ... & Pyne, S. J. (2009). Fire in the Earth system. *Science*, 324(5926), 481-484.
+                  3. Scott, J. H., & Reinhardt, E. D. (2001). *Assessing crown fire potential by linking models of surface and crown fire behavior*. USDA Forest Service, Rocky Mountain Research Station.
+                
+                Utilizando essa escala, podemos modelar a propagação do fogo de forma mais precisa, levando em consideração as características específicas de cada tipo de vegetação.
           - **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
           - **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
           - **Tipo de solo**: Diferentes tipos de solo influenciam a probabilidade de propagação do fogo.
+                ### Escala Técnica e Científica para Tipos de Solo na Propagação de Fogo
+                
+                Para criar uma escala metodológica tecnicocientífica para os tipos de solo na propagação de fogo, consideramos fatores como a capacidade de retenção de umidade, a permeabilidade, e a influência do solo na vegetação. A escala a seguir é baseada em estudos científicos e dados empíricos sobre a influência do tipo de solo na propagação de incêndios.
+                
+                #### Critérios de Avaliação
+                1. **Retenção de Umidade**: Capacidade do solo de reter água, influenciando a secagem da vegetação.
+                2. **Permeabilidade**: Capacidade do solo de permitir a infiltração da água.
+                3. **Influência na Vegetação**: O tipo de solo afeta o tipo e a densidade da vegetação que pode crescer, influenciando a inflamabilidade geral.
+                
+                #### Escala de Inflamabilidade do Solo
+                
+                ##### 1. Solo Arenoso (0.4)
+                - **Retenção de Umidade**: Baixa, solo arenoso drena rapidamente a água, deixando a vegetação mais seca e suscetível a incêndios.
+                - **Permeabilidade**: Alta, permite a rápida infiltração e drenagem da água.
+                - **Influência na Vegetação**: Suporta vegetação menos densa e de raízes superficiais, que secam rapidamente.
+                
+                ##### 2. Solo Misto (0.6)
+                - **Retenção de Umidade**: Moderada, retém mais água que o solo arenoso, mas ainda permite uma boa drenagem.
+                - **Permeabilidade**: Moderada, combina características de solos arenosos e argilosos.
+                - **Influência na Vegetação**: Suporta uma vegetação variada, com densidade moderada, o que influencia a propagação do fogo de forma intermediária.
+                
+                ##### 3. Solo Argiloso (0.8)
+                - **Retenção de Umidade**: Alta, solo argiloso retém a água por mais tempo, mantendo a vegetação mais úmida.
+                - **Permeabilidade**: Baixa, a água infiltra-se lentamente, o que pode levar a maior umidade do solo e da vegetação.
+                - **Influência na Vegetação**: Suporta vegetação densa e de raízes profundas, que tende a ser menos inflamável devido à maior umidade.
+                
+                #### Justificativa Científica
+                A escala acima é baseada em princípios pedológicos e estudos de campo que analisam a resposta do solo à secagem e à propagação de incêndios. A capacidade de retenção de umidade e a permeabilidade do solo influenciam diretamente a disponibilidade de água para a vegetação, afetando sua secagem e inflamabilidade.
+                
+                - **Referências**:
+                  1. Brady, N. C., & Weil, R. R. (2008). *The Nature and Properties of Soils*. Pearson Education.
+                  2. DeBano, L. F., Neary, D. G., & Ffolliott, P. F. (1998). *Fire's Effects on Ecosystems*. John Wiley & Sons.
+                  3. Neary, D. G., Ryan, K. C., & DeBano, L. F. (2005). *Wildland Fire in Ecosystems: Effects of Fire on Soil and Water*. USDA Forest Service.
+                
+                Utilizando essa escala, podemos modelar a propagação do fogo de forma mais precisa, levando em consideração as características específicas de cada tipo de solo e sua influência na vegetação e na umidade do ambiente.
+                
+                Essa escala proporciona uma base técnica e científica para entender como diferentes tipos de solo afetam a propagação do fogo, permitindo simulações mais precisas e realistas.
+
+        - **W_{effect}(i, j)**: Este fator é calculado com base na direção e velocidade do vento, influenciando a probabilidade de propagação do fogo na direção do vento:
+          - **Velocidade do Vento (km/h)**: Quanto maior a velocidade do vento, maior a probabilidade de propagação do fogo.
+          - **Direção do Vento (graus)**: A direção do vento influencia a direção preferencial de propagação do fogo.
+
+        - **N_{effect}**: Este é um fator aleatório que introduz ruído na simulação, representando incertezas e variabilidades ambientais:
+          - **Ruído (%)**: Define o nível de aleatoriedade na propagação do fogo, variando de 1% a 100%.
 
         ### Estatísticas e Interpretações
         A simulação permite observar como o fogo se propaga em diferentes condições ambientais. Os resultados podem ser utilizados para entender o comportamento do fogo e planejar estratégias de manejo e controle de incêndios.
@@ -375,7 +467,7 @@ def main():
         
         #### Estatística Q
         A Estatística Q é uma maneira de medir a relação entre variáveis em um contexto onde há dependência ou não linearidade entre elas. No contexto da propagação do fogo, a Estatística Q pode ajudar a entender como diferentes fatores (como temperatura, umidade, velocidade do vento) se combinam de maneiras complexas para influenciar a propagação do fogo. Em outras palavras, é uma ferramenta que nos ajuda a explorar e interpretar a complexidade dos dados que não seguem padrões simples.
-        
+
         #### Matriz de Confusão
         Uma matriz de confusão é uma tabela usada para avaliar a performance de um modelo de classificação. No nosso simulador de fogo, a matriz de confusão mostra quantas vezes o modelo previu corretamente (ou incorretamente) o estado de uma célula (se estava intacta, queimando ou queimada). É como uma tabela que mostra quantas vezes um aluno acertou ou errou diferentes tipos de perguntas em uma prova. Por exemplo, se a matriz de confusão mostra que 243191 células foram corretamente identificadas como intactas e 126 células foram corretamente identificadas em cada estágio de queima, mas algumas previsões foram incorretas, isso nos ajuda a entender se o modelo está funcionando bem ou se precisa de ajustes.
         
