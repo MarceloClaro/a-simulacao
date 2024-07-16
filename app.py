@@ -429,9 +429,7 @@ def main():
             "Matriz de Confusão": matriz_confusao.tolist()
         }
 
-        if st.button('Baixar Resultados como PDF'):
-            pdf_bytes = gerar_pdf(resultados)
-            st.download_button(label="Baixar PDF", data=pdf_bytes, file_name="resultados_simulacao.pdf", mime="application/pdf")
+        
 
 if __name__ == "__main__":
     main()
