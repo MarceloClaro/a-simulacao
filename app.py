@@ -379,7 +379,6 @@ Espero que esta explicação tenha ajudado a entender os processos e análises e
 Para mais detalhes, siga-me no Instagram: [Marcelo Claro](https://www.instagram.com/marceloclaro.geomaker/)
 """)
 
-        """)
 
     params = {
         'temperatura': st.sidebar.slider('Temperatura (°C)', 0, 50, 30),
