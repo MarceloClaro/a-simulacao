@@ -9,13 +9,6 @@ import pandas as pd
 from fpdf import FPDF
 import base64
 
-# Configurações da página do Streamlit
-st.set_page_config(
-    page_title="Geomaker +IA - simulador autômato celular",
-    page_icon="logo.png",
-    layout="wide",
-    
-)
 
 # Definindo estados das células
 VIVO = 0
