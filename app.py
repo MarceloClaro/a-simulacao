@@ -269,8 +269,9 @@ def main():
     st.subheader("Simulador de Propagação de Incêndio em Autômatos Celulares")
 
     st.sidebar.image("logo.png", width=200)
-       with st.sidebar.expander("Como encontra o NDVI e EVI para Simulação"):
-        st.markdown("""Para obter os índices NDVI e EVI da sua região e ajudar na simulação de propagação do fogo, você pode utilizar o **SATVeg - Sistema de Análise Temporal da Vegetação**. Esta ferramenta permite acessar índices vegetativos NDVI e EVI do sensor MODIS em qualquer local da América do Sul.
+    with st.sidebar.expander("Como encontra o NDVI e EVI para Simulação"):
+        st.markdown("""
+        Para obter os índices NDVI e EVI da sua região e ajudar na simulação de propagação do fogo, você pode utilizar o **SATVeg - Sistema de Análise Temporal da Vegetação**. Esta ferramenta permite acessar índices vegetativos NDVI e EVI do sensor MODIS em qualquer local da América do Sul.
         Para acessar os dados, visite o site do SATVeg:
         [SATVeg](https://www.satveg.cnptia.embrapa.br/satveg/login.html)
         Fontes:
