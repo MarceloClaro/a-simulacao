@@ -16,6 +16,7 @@ import rasterio
 from rasterio.plot import show
 from rasterio.features import rasterize
 from fpdf import FPDF
+import urllib.parse  # Para codificar o endereço na URL
 
 # Definições iniciais e configurações globais
 st.set_page_config(page_title="EcoSim.ai - Simulador de Propagação de Incêndio", page_icon="🔥")
@@ -259,24 +260,65 @@ def gerar_relatorio_pdf(resultados):
     pdf_bytes = pdf.output(dest='S').encode('latin1')
     return pdf_bytes
 
+def obter_coordenadas_endereco(endereco):
+    # Usar a API Nominatim para geocodificar o endereço
+    url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(endereco)}&format=json&limit=1"
+    response = requests.get(url)
+    if response.status_code == 200:
+        resultado = response.json()
+        if resultado:
+            latitude = float(resultado[0]['lat'])
+            longitude = float(resultado[0]['lon'])
+            return latitude, longitude
+        else:
+            st.error("Endereço não encontrado.")
+            return None, None
+    else:
+        st.error("Erro ao consultar o serviço de geocodificação.")
+        return None, None
+
 # Interface do usuário
 def main():
     st.title("EcoSim.ai")
     st.subheader("Simulador Inovador de Propagação de Incêndio")
 
-    # Seção para seleção de localização
-    st.header("Seleção de Localização")
+    # Seção para entrada de cidade ou endereço
+    st.header("Entrada de Cidade ou Endereço")
+    endereco = st.text_input("Digite o nome da cidade ou endereço:")
+    if st.button("Obter Coordenadas"):
+        if endereco:
+            latitude, longitude = obter_coordenadas_endereco(endereco)
+            if latitude and longitude:
+                st.success(f"Coordenadas obtidas: Latitude {latitude:.6f}, Longitude {longitude:.6f}")
+                st.session_state.latitude = latitude
+                st.session_state.longitude = longitude
+            else:
+                st.error("Não foi possível obter as coordenadas para o endereço fornecido.")
+                return
+        else:
+            st.error("Por favor, insira um endereço válido.")
+            return
+
+    # Ou selecionar no mapa
+    st.header("Ou clique no mapa para selecionar a localização")
     m = folium.Map(location=[-15.793889, -47.882778], zoom_start=4)
+    if 'latitude' in st.session_state and 'longitude' in st.session_state:
+        folium.Marker([st.session_state.latitude, st.session_state.longitude], tooltip="Localização Selecionada").add_to(m)
     map_data = st_folium(m, width=700, height=500)
 
     if map_data['last_clicked'] is not None:
         latitude = map_data['last_clicked']['lat']
         longitude = map_data['last_clicked']['lng']
-        st.write(f"Latitude: {latitude:.6f}")
-        st.write(f"Longitude: {longitude:.6f}")
-    else:
-        st.warning("Por favor, clique no mapa para selecionar a localização.")
+        st.success(f"Coordenadas selecionadas: Latitude {latitude:.6f}, Longitude {longitude:.6f}")
+        st.session_state.latitude = latitude
+        st.session_state.longitude = longitude
+
+    if 'latitude' not in st.session_state or 'longitude' not in st.session_state:
+        st.warning("Por favor, insira um endereço ou clique no mapa para selecionar a localização.")
         return
+    else:
+        latitude = st.session_state.latitude
+        longitude = st.session_state.longitude
 
     if not coordenadas_validas(latitude, longitude):
         st.error("As coordenadas selecionadas não estão dentro dos limites da América do Sul.")
@@ -293,33 +335,35 @@ def main():
             ndvi_evi_atual = lista_ndvi_evi[-1]
             st.success(f"Valor atual de {tipo_indice.upper()}: {ndvi_evi_atual}")
             gerar_serie_historica(lista_datas, lista_ndvi_evi)
+            st.session_state.ndvi_evi_atual = ndvi_evi_atual
         else:
             st.error("Não foi possível obter o NDVI/EVI.")
             return
     else:
-        ndvi_evi_atual = 0.5  # Valor padrão se não obtido
+        ndvi_evi_atual = st.session_state.get('ndvi_evi_atual', 0.5)  # Valor padrão se não obtido
 
     if st.button('Obter Dados Climáticos da API'):
         dados_climaticos = obter_dados_climaticos(latitude, longitude)
         if dados_climaticos is not None:
             st.success("Dados climáticos obtidos com sucesso!")
             st.write(dados_climaticos)
+            st.session_state.dados_climaticos = dados_climaticos
         else:
             st.error("Não foi possível obter os dados climáticos.")
             return
     else:
-        dados_climaticos = {
+        dados_climaticos = st.session_state.get('dados_climaticos', {
             'temperatura': 25,
             'umidade': 50,
             'velocidade_vento': 10,
             'direcao_vento': 90,
             'precipitacao': 0,
             'radiacao_solar': 800
-        }
+        })
 
     # Entrada de dados manuais
-    st.header("Dados Manuais")
-    st.write("Caso deseje, você pode ajustar os parâmetros manualmente.")
+    st.header("Ajuste dos Parâmetros")
+    st.write("Você pode ajustar os parâmetros manualmente antes de executar a simulação.")
 
     temperatura = st.slider('Temperatura (°C)', -10, 50, int(dados_climaticos.get('temperatura', 25)))
     umidade = st.slider('Umidade Relativa (%)', 0, 100, int(dados_climaticos.get('umidade', 50)))
@@ -367,11 +411,12 @@ def main():
         if classificacao is not None:
             st.success(f"Classificação do Solo: {classificacao['items'][0]['ORDEM']}")
             tipo_solo = classificacao['items'][0]['ORDEM']
+            st.session_state.tipo_solo = tipo_solo
         else:
             st.error("Não foi possível classificar o solo.")
             tipo_solo = 'Desconhecido'
     else:
-        tipo_solo = 'Desconhecido'
+        tipo_solo = st.session_state.get('tipo_solo', 'Desconhecido')
 
     # Parâmetros para a simulação
     params = {
