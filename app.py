@@ -280,8 +280,11 @@ def main():
         Fontes:
         
         (1) SATVeg - Embrapa. https://www.satveg.cnptia.embrapa.br/satveg/login.html.
+        
         (2) SATVeg - Embrapa. https://www.satveg.cnptia.embrapa.br/satveg/pages/tutoriais.html.
+        
         (3) Sistema de Análise Temporal da Vegetação - SATVeg. https://www.embrapa.br/busca-de-solucoes-tecnologicas/-/produto-servico/2408/sistema-de-analise-temporal-da-vegetacao---satveg.
+       
         (4) API Store - SATVeg. https://www.agroapi.cnptia.embrapa.br/store/apis/info?name=SATVeg&version=v2&provider=agroapi.    
         """)
 
