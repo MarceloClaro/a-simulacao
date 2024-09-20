@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -12,35 +14,36 @@ from PIL import Image
 import geopandas as gpd
 from shapely.geometry import Polygon, Point
 from fpdf import FPDF
-import urllib.parse  # For URL encoding
+import urllib.parse  # Para codificar o endereço na URL
 
-# Initial configuration for Streamlit
+# Configurações iniciais do Streamlit
 st.set_page_config(
-    page_title="EcoSim.ai - Fire Propagation Simulator",
+    page_title="EcoSim.ai - Simulador de Propagação de Incêndio",
     page_icon="🔥",
     layout="wide"
 )
 
-# Cell states in the simulation
-VIVO = 0        # Unburned vegetation
-QUEIMANDO = 1   # Burning vegetation
-QUEIMADO = 2    # Burned vegetation
+# Definição dos estados das células na simulação
+VIVO = 0        # Vegetação não queimada
+QUEIMANDO = 1   # Vegetação em chamas
+QUEIMADO = 2    # Vegetação já queimada
 
-# Colors associated with each state for map visualization
+# Cores associadas a cada estado para visualização no mapa
 colors = {
     VIVO: 'green',
     QUEIMANDO: 'red',
     QUEIMADO: 'black'
 }
 
-# Credentials for API access (ensure to keep these secure)
+# Credenciais para acesso às APIs (mantenha essas informações seguras)
+
 consumer_key = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
 consumer_secret = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
 
-# Functions for API integration
+# Funções para integração com as APIs
 def obter_token_acesso(consumer_key, consumer_secret):
     """
-    Obtains the access token for authentication with Embrapa APIs.
+    Obtém o token de acesso para autenticação nas APIs da Embrapa.
     """
     token_url = 'https://api.cnptia.embrapa.br/token'
     credentials = f"{consumer_key}:{consumer_secret}"
@@ -62,12 +65,12 @@ def obter_token_acesso(consumer_key, consumer_secret):
         access_token = token_info['access_token']
         return access_token
     else:
-        st.error(f"Error obtaining access token: {response.status_code} - {response.text}")
+        st.error(f"Erro ao obter token de acesso: {response.status_code} - {response.text}")
         return None
 
 def obter_ndvi_evi(latitude, longitude, tipo_indice='ndvi', satelite='comb'):
     """
-    Obtains the NDVI or EVI time series for the specified location.
+    Obtém a série temporal de NDVI ou EVI para a localização especificada.
     """
     access_token = obter_token_acesso(consumer_key, consumer_secret)
     if access_token is None:
@@ -89,26 +92,56 @@ def obter_ndvi_evi(latitude, longitude, tipo_indice='ndvi', satelite='comb'):
         data = response.json()
         lista_ndvi_evi = data['listaSerie']
         lista_datas = data['listaDatas']
-        # Correct date parsing according to the format returned by the API
-        # Display the raw date strings for debugging
-        st.write("Raw date strings:", lista_datas)
+        # Corrigir a análise de datas de acordo com o formato retornado pela API
+        # Exibir as strings de datas brutas para depuração
+        # st.write("Datas brutas:", lista_datas)
         try:
-            # Adjust the date format based on the actual format returned by the API
+            # Ajustar o formato da data com base no formato real retornado pela API
             lista_datas = [datetime.strptime(data_str, '%Y-%m-%d') for data_str in lista_datas]
         except ValueError:
             try:
                 lista_datas = [datetime.strptime(data_str, '%d/%m/%Y') for data_str in lista_datas]
             except ValueError:
-                st.error("Date format not recognized. Please check the date format returned by the API.")
+                st.error("Formato de data não reconhecido. Verifique o formato de data retornado pela API.")
                 return None, None
         return lista_ndvi_evi, lista_datas
     else:
-        st.error(f"Error obtaining NDVI/EVI data: {response.status_code} - {response.text}")
+        st.error(f"Erro ao obter dados NDVI/EVI: {response.status_code} - {response.text}")
         return None, None
 
-def obter_dados_climaticos(latitude, longitude):
+def obter_datas_disponiveis(variavel, access_token):
     """
-    Obtains the climatic data time series for the specified location.
+    Obtém as datas de execução disponíveis para a variável climática especificada.
+    """
+    url = f'https://api.cnptia.embrapa.br/climapi/v1/ncep-gfs/{variavel}'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        datas = response.json()
+        return datas
+    return None
+
+def encontrar_data_proxima(data_consulta, datas_disponiveis):
+    """
+    Encontra a data de execução mais próxima da data solicitada.
+    """
+    data_consulta_dt = datetime.strptime(data_consulta, '%Y-%m-%d')
+    datas_dt = []
+    for data_str in datas_disponiveis:
+        try:
+            datas_dt.append(datetime.strptime(data_str, '%Y%m%d%H'))
+        except ValueError:
+            continue
+    if not datas_dt:
+        return None
+    data_proxima = min(datas_dt, key=lambda d: abs(d - data_consulta_dt))
+    return data_proxima.strftime('%Y%m%d%H')
+
+def obter_dados_climaticos(latitude, longitude, data_consulta):
+    """
+    Obtém as séries temporais dos dados climáticos para a data especificada e localização.
     """
     access_token = obter_token_acesso(consumer_key, consumer_secret)
     if access_token is None:
@@ -123,8 +156,13 @@ def obter_dados_climaticos(latitude, longitude):
     }
     series_temporais = {}
     for param, var_api in variaveis.items():
-        data_execucao = obter_ultima_data_execucao(var_api, access_token)
+        datas_disponiveis = obter_datas_disponiveis(var_api, access_token)
+        if datas_disponiveis is None:
+            continue
+        # Encontrar a data mais próxima da data solicitada
+        data_execucao = encontrar_data_proxima(data_consulta, datas_disponiveis)
         if data_execucao is None:
+            st.error(f"Dados não disponíveis para {param} na data {data_consulta}.")
             continue
         previsao = obter_previsao(var_api, data_execucao, latitude, longitude, access_token)
         if previsao is None:
@@ -132,14 +170,22 @@ def obter_dados_climaticos(latitude, longitude):
         tempos = []
         valores = []
         for ponto in previsao:
-            # Convert timestamp in milliseconds to datetime
-            tempos.append(datetime.fromtimestamp(ponto['data'] / 1000))
-            valor = ponto['valor']
+            # Ajustar as chaves de acordo com a resposta da API
+            if 'time' in ponto:
+                tempos.append(datetime.fromtimestamp(ponto['time'] / 1000))  # Usar 'time' em vez de 'data'
+            else:
+                st.error(f"Chave 'time' não encontrada na resposta da API para {param}.")
+                continue
+            if 'valor' in ponto:
+                valor = ponto['valor']
+            else:
+                st.error(f"Chave 'valor' não encontrada na resposta da API para {param}.")
+                continue
             if param == 'temperatura':
-                valor -= 273.15  # Convert from Kelvin to Celsius
+                valor -= 273.15  # Converter de Kelvin para Celsius
             valores.append(valor)
         series_temporais[param] = {'tempos': tempos, 'valores': valores}
-    # Process wind speed and direction
+    # Processar velocidade e direção do vento
     if 'vento_u' in series_temporais and 'vento_v' in series_temporais:
         tempos = series_temporais['vento_u']['tempos']
         u_valores = np.array(series_temporais['vento_u']['valores'])
@@ -152,24 +198,9 @@ def obter_dados_climaticos(latitude, longitude):
         del series_temporais['vento_v']
     return series_temporais
 
-def obter_ultima_data_execucao(variavel, access_token):
-    """
-    Obtains the latest execution date available for the specified climatic variable.
-    """
-    url = f'https://api.cnptia.embrapa.br/climapi/v1/ncep-gfs/{variavel}'
-    headers = {
-        'Authorization': f'Bearer {access_token}'
-    }
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        datas = response.json()
-        if datas:
-            return datas[-1]
-    return None
-
 def obter_previsao(variavel, data_execucao, latitude, longitude, access_token):
     """
-    Obtains the forecast of the specified climatic variable for the execution date, latitude, and longitude.
+    Obtém a previsão da variável climática especificada para a data de execução, latitude e longitude.
     """
     url = f'https://api.cnptia.embrapa.br/climapi/v1/ncep-gfs/{variavel}/{data_execucao}/{longitude}/{latitude}'
     headers = {
@@ -184,7 +215,7 @@ def obter_previsao(variavel, data_execucao, latitude, longitude, access_token):
 
 def classificar_solo(dados_perfil):
     """
-    Classifies the soil based on the provided profile data.
+    Classifica o solo com base nos dados do perfil fornecidos.
     """
     access_token = obter_token_acesso(consumer_key, consumer_secret)
     if access_token is None:
@@ -200,44 +231,44 @@ def classificar_solo(dados_perfil):
         classificacao = response.json()
         return classificacao
     else:
-        st.error(f"Error classifying soil: {response.status_code} - {response.text}")
+        st.error(f"Erro ao classificar o solo: {response.status_code} - {response.text}")
         return None
 
-# Auxiliary functions
+# Funções auxiliares
 def coordenadas_validas(latitude, longitude):
     """
-    Checks if the coordinates are within the limits of South America.
+    Verifica se as coordenadas estão dentro dos limites da América do Sul.
     """
     return -60.0 <= latitude <= 15.0 and -90.0 <= longitude <= -30.0
 
 def gerar_mapa_propagacao(simulacao, latitude, longitude, tamanho_celula):
     """
-    Generates the fire propagation map based on the simulation.
+    Gera o mapa de propagação do incêndio com base na simulação.
     """
     polygons = []
     states = []
     tamanho_grade = simulacao[0].shape[0]
     for i in range(tamanho_grade):
         for j in range(tamanho_grade):
-            # Calculate the coordinates of each cell
+            # Calcular as coordenadas de cada célula
             x = longitude + (j - tamanho_grade / 2) * tamanho_celula
             y = latitude + (i - tamanho_grade / 2) * tamanho_celula
-            # Create a polygon for each cell
+            # Criar um polígono para cada célula
             polygon = Polygon([
                 (x, y),
                 (x + tamanho_celula, y),
                 (x + tamanho_celula, y + tamanho_celula),
                 (x, y + tamanho_celula)
             ])
-            # Get the state of the cell (VIVO, QUEIMANDO, QUEIMADO)
+            # Obter o estado da célula (VIVO, QUEIMANDO, QUEIMADO)
             state = simulacao[-1][i, j]
             polygons.append(polygon)
             states.append(state)
 
-    # Create a GeoDataFrame with the polygons and states
+    # Criar um GeoDataFrame com os polígonos e estados
     gdf = gpd.GeoDataFrame({'geometry': polygons, 'state': states}, crs='EPSG:4326')
 
-    # Create the interactive map with Folium
+    # Criar o mapa interativo com o Folium
     m = folium.Map(location=[latitude, longitude], zoom_start=10)
     folium.GeoJson(
         gdf,
@@ -252,77 +283,77 @@ def gerar_mapa_propagacao(simulacao, latitude, longitude, tamanho_celula):
 
 def gerar_serie_historica(lista_datas, lista_ndvi_evi):
     """
-    Generates a historical series graph for NDVI/EVI.
+    Gera um gráfico de série histórica para o NDVI/EVI.
     """
     df = pd.DataFrame({'Data': pd.to_datetime(lista_datas), 'Índice': lista_ndvi_evi})
-    fig = px.line(df, x='Data', y='Índice', title='Historical Series of NDVI/EVI')
+    fig = px.line(df, x='Data', y='Índice', title='Série Histórica de NDVI/EVI')
     st.plotly_chart(fig)
 
 def executar_simulacao(params, tamanho_grade, num_passos):
     """
-    Executes the fire propagation simulation based on the provided parameters.
+    Executa a simulação de propagação de incêndio com base nos parâmetros fornecidos.
     """
-    # Initialize the grid with VIVO cells
+    # Inicializar a grade com células VIVAS
     grade = np.full((tamanho_grade, tamanho_grade), VIVO)
 
-    # Set the ignition point at the center of the grid
+    # Definir ponto de ignição no centro da grade
     centro = tamanho_grade // 2
     grade[centro, centro] = QUEIMANDO
 
-    # List to store the grids at each time step
+    # Lista para armazenar as grades em cada passo de tempo
     grades = [grade.copy()]
 
-    # Execute the simulation for 'num_passos' time steps
+    # Executar a simulação por 'num_passos' passos de tempo
     for passo in range(num_passos):
         nova_grade = grade.copy()
         for i in range(tamanho_grade):
             for j in range(tamanho_grade):
                 if grade[i, j] == QUEIMANDO:
-                    # The cell currently burning will be QUEIMADO in the next step
+                    # Célula que está queimando agora ficará QUEIMADA no próximo passo
                     nova_grade[i, j] = QUEIMADO
-                    # Propagate the fire to neighboring cells
-                    vizinhos = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Orthogonal neighbors
+                    # Propagar o fogo para os vizinhos
+                    vizinhos = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Vizinhos ortogonais
                     for vi, vj in vizinhos:
                         ni, nj = i + vi, j + vj
-                        # Check if the neighbor is within the grid limits
+                        # Verificar se o vizinho está dentro dos limites da grade
                         if 0 <= ni < tamanho_grade and 0 <= nj < tamanho_grade:
-                            # Only propagate to VIVO cells
+                            # Propagar somente para células VIVAS
                             if grade[ni, nj] == VIVO:
-                                # Calculate the propagation probability
+                                # Calcular a probabilidade de propagação
                                 probabilidade = calcular_probabilidade_propagacao(params)
-                                # Decide whether the fire will propagate to the neighboring cell
+                                # Decidir se o fogo irá propagar para a célula vizinha
                                 if np.random.rand() < probabilidade:
                                     nova_grade[ni, nj] = QUEIMANDO
-        # Update the grid for the next step
+        # Atualizar a grade para o próximo passo
         grade = nova_grade
         grades.append(grade.copy())
     return grades
 
 def calcular_probabilidade_propagacao(params):
     """
-    Calculates the probability of fire propagation based on the provided parameters.
+    Calcula a probabilidade de propagação do fogo com base nos parâmetros fornecidos.
     """
-    # Combine fuel, climatic, and terrain factors
+    # Combinação dos fatores de combustível, climático e terreno
     prob = params['fator_combustivel'] * params['fator_climatico'] * params['fator_terreno']
-    # Ensure the probability is between 0 and 1
+    # Garantir que a probabilidade esteja entre 0 e 1
     return min(max(prob, 0), 1)
 
 def gerar_relatorio_pdf(resultados):
     """
-    Generates a PDF report with the simulation results.
+    Gera um relatório em PDF com os resultados da simulação.
     """
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
 
-    pdf.cell(200, 10, txt="Fire Propagation Simulation Report", ln=True, align='C')
-    pdf.cell(200, 10, txt=f"Simulation Date: {resultados['data_simulacao']}", ln=True)
+    pdf.cell(200, 10, txt="Relatório de Simulação de Propagação de Incêndio", ln=True, align='C')
+    pdf.cell(200, 10, txt=f"Data da Simulação: {resultados['data_simulacao']}", ln=True)
 
-    pdf.cell(200, 10, txt="Parameters Used:", ln=True)
+    pdf.cell(200, 10, txt="Parâmetros Utilizados:", ln=True)
     for key, value in resultados['params'].items():
         pdf.cell(200, 10, txt=f"{key}: {value}", ln=True)
 
-    pdf.cell(200, 10, txt="Results:", ln=True)
+    pdf.cell(200, 10, txt="Resultados:", ln=True)
     for key, value in resultados['resultados'].items():
         pdf.cell(200, 10, txt=f"{key}: {value}", ln=True)
 
@@ -331,11 +362,11 @@ def gerar_relatorio_pdf(resultados):
 
 def obter_coordenadas_endereco(endereco):
     """
-    Obtains the coordinates (latitude and longitude) for the provided address using the Nominatim API.
+    Obtém as coordenadas (latitude e longitude) para o endereço fornecido usando a API Nominatim.
     """
     url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(endereco)}&format=json&limit=1"
     headers = {
-        'User-Agent': 'EcoSim.ai/1.0 (contact@example.com)'
+        'User-Agent': 'EcoSim.ai/1.0 (contato@exemplo.com)'
     }
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
@@ -345,80 +376,80 @@ def obter_coordenadas_endereco(endereco):
             longitude = float(resultado[0]['lon'])
             return latitude, longitude
         else:
-            st.error("Address not found.")
+            st.error("Endereço não encontrado.")
             return None, None
     else:
-        st.error(f"Error querying the geocoding service. Status code: {response.status_code}")
+        st.error(f"Erro ao consultar o serviço de geocodificação. Código de status: {response.status_code}")
         return None, None
 
-# User interface
+# Interface do usuário
 def main():
     """
-    Main function that controls the user interface and application logic.
+    Função principal que controla a interface do usuário e a lógica do aplicativo.
     """
     st.title("EcoSim.ai")
-    st.subheader("Innovative Fire Propagation Simulator")
+    st.subheader("Simulador Inovador de Propagação de Incêndio")
 
-    # Section for entering city or address
-    st.header("Enter City or Address")
-    endereco = st.text_input("Enter the city name or address:")
-    if st.button("Get Coordinates"):
+    # Seção para entrada de cidade ou endereço
+    st.header("Entrada de Cidade ou Endereço")
+    endereco = st.text_input("Digite o nome da cidade ou endereço:")
+    if st.button("Obter Coordenadas"):
         if endereco:
             latitude, longitude = obter_coordenadas_endereco(endereco)
             if latitude and longitude:
-                st.success(f"Coordinates obtained: Latitude {latitude:.6f}, Longitude {longitude:.6f}")
+                st.success(f"Coordenadas obtidas: Latitude {latitude:.6f}, Longitude {longitude:.6f}")
                 st.session_state.latitude = latitude
                 st.session_state.longitude = longitude
             else:
-                st.error("Unable to obtain coordinates for the provided address.")
+                st.error("Não foi possível obter as coordenadas para o endereço fornecido.")
                 return
         else:
-            st.error("Please enter a valid address.")
+            st.error("Por favor, insira um endereço válido.")
             return
 
-    # Or select on the map
-    st.header("Or click on the map to select the location")
+    # Ou selecionar no mapa
+    st.header("Ou clique no mapa para selecionar a localização")
     m = folium.Map(location=[-15.793889, -47.882778], zoom_start=4)
     if 'latitude' in st.session_state and 'longitude' in st.session_state:
-        folium.Marker([st.session_state.latitude, st.session_state.longitude], tooltip="Selected Location").add_to(m)
+        folium.Marker([st.session_state.latitude, st.session_state.longitude], tooltip="Localização Selecionada").add_to(m)
     map_data = st_folium(m, width=700, height=500)
 
     if map_data['last_clicked'] is not None:
         latitude = map_data['last_clicked']['lat']
         longitude = map_data['last_clicked']['lng']
-        st.success(f"Selected coordinates: Latitude {latitude:.6f}, Longitude {longitude:.6f}")
+        st.success(f"Coordenadas selecionadas: Latitude {latitude:.6f}, Longitude {longitude:.6f}")
         st.session_state.latitude = latitude
         st.session_state.longitude = longitude
 
     if 'latitude' not in st.session_state or 'longitude' not in st.session_state:
-        st.warning("Please enter an address or click on the map to select the location.")
+        st.warning("Por favor, insira um endereço ou clique no mapa para selecionar a localização.")
         return
     else:
         latitude = st.session_state.latitude
         longitude = st.session_state.longitude
 
     if not coordenadas_validas(latitude, longitude):
-        st.error("The selected coordinates are not within the limits of South America.")
+        st.error("As coordenadas selecionadas não estão dentro dos limites da América do Sul.")
         return
 
-    # Obtain data from APIs
-    st.header("Obtaining Data from APIs")
-    tipo_indice = st.selectbox('Vegetative Index Type', ['ndvi', 'evi'])
-    satelite = st.selectbox('Satellite', ['terra', 'aqua', 'comb'])
+    # Obter dados das APIs
+    st.header("Obtenção de Dados das APIs")
+    tipo_indice = st.selectbox('Tipo de Índice Vegetativo', ['ndvi', 'evi'])
+    satelite = st.selectbox('Satélite', ['terra', 'aqua', 'comb'])
 
-    # Obtain NDVI/EVI
-    if st.button('Obtain NDVI/EVI from API'):
+    # Obter NDVI/EVI
+    if st.button('Obter NDVI/EVI da API'):
         lista_ndvi_evi, lista_datas = obter_ndvi_evi(latitude, longitude, tipo_indice, satelite)
         if lista_ndvi_evi is not None:
             ndvi_evi_atual = lista_ndvi_evi[-1]
-            st.success(f"Current {tipo_indice.upper()} value: {ndvi_evi_atual}")
+            st.success(f"Valor atual de {tipo_indice.upper()}: {ndvi_evi_atual}")
             gerar_serie_historica(lista_datas, lista_ndvi_evi)
             st.session_state.ndvi_evi_atual = ndvi_evi_atual
             st.session_state.lista_ndvi_evi = lista_ndvi_evi
             st.session_state.lista_datas_ndvi_evi = lista_datas
             ndvi = ndvi_evi_atual
         else:
-            st.error("Unable to obtain NDVI/EVI.")
+            st.error("Não foi possível obter o NDVI/EVI.")
             return
     else:
         ndvi_evi_atual = st.session_state.get('ndvi_evi_atual', 0.5)
@@ -428,29 +459,35 @@ def main():
         if lista_ndvi_evi and lista_datas_ndvi_evi:
             gerar_serie_historica(lista_datas_ndvi_evi, lista_ndvi_evi)
 
-    # Obtain climatic data
-    if st.button('Obtain Climatic Data from API'):
-        series_temporais = obter_dados_climaticos(latitude, longitude)
+    # Obter dados climáticos
+    st.header("Obtenção de Dados Climáticos")
+
+    # Solicitar data ao usuário
+    data_consulta = st.date_input("Selecione a data para os dados climáticos:", datetime.now().date())
+
+    if st.button('Obter Dados Climáticos da API'):
+        data_consulta_str = data_consulta.strftime('%Y-%m-%d')
+        series_temporais = obter_dados_climaticos(latitude, longitude, data_consulta_str)
         if series_temporais:
-            st.success("Climatic data obtained successfully!")
+            st.success("Dados climáticos obtidos com sucesso!")
             st.session_state.series_temporais = series_temporais
-            # Update manual parameter values with the latest data
+            # Atualizar os valores dos parâmetros manuais com os dados mais recentes
             temperatura = series_temporais['temperatura']['valores'][-1]
             umidade = series_temporais['umidade']['valores'][-1]
             velocidade_vento = series_temporais['velocidade_vento']['valores'][-1]
             direcao_vento = series_temporais['direcao_vento']['valores'][-1]
             precipitacao = series_temporais['precipitacao']['valores'][-1]
             radiacao_solar = series_temporais['radiacao_solar']['valores'][-1]
-            # Display tables and graphs
-            st.header("Climatic Time Series")
+            # Exibir tabelas e gráficos
+            st.header("Séries Temporais Climáticas")
             for param, data in series_temporais.items():
-                df = pd.DataFrame({'Date': data['tempos'], 'Value': data['valores']})
+                df = pd.DataFrame({'Data': data['tempos'], 'Valor': data['valores']})
                 st.subheader(f"{param.capitalize()}")
                 st.dataframe(df)
-                fig = px.line(df, x='Date', y='Value', title=f"Time Series of {param.capitalize()}")
+                fig = px.line(df, x='Data', y='Valor', title=f'Série Temporal de {param.capitalize()}')
                 st.plotly_chart(fig)
         else:
-            st.error("Unable to obtain climatic data.")
+            st.error("Não foi possível obter os dados climáticos.")
             return
     else:
         series_temporais = st.session_state.get('series_temporais', None)
@@ -469,26 +506,26 @@ def main():
             precipitacao = 0
             radiacao_solar = 800
 
-    # Adjust Parameters with values obtained from APIs
-    st.header("Adjust Parameters")
-    st.write("You can manually adjust the parameters before running the simulation.")
+    # Ajuste dos Parâmetros com os valores obtidos das APIs
+    st.header("Ajuste dos Parâmetros")
+    st.write("Você pode ajustar os parâmetros manualmente antes de executar a simulação.")
 
-    temperatura = st.slider('Temperature (°C)', -10.0, 50.0, float(temperatura))
-    umidade = st.slider('Relative Humidity (%)', 0.0, 100.0, float(umidade))
-    velocidade_vento = st.slider('Wind Speed (km/h)', 0.0, 100.0, float(velocidade_vento))
-    direcao_vento = st.slider('Wind Direction (degrees)', 0.0, 360.0, float(direcao_vento))
-    precipitacao = st.slider('Precipitation (mm)', 0.0, 200.0, float(precipitacao))
-    radiacao_solar = st.slider('Solar Radiation (W/m²)', 0.0, 1200.0, float(radiacao_solar))
+    temperatura = st.slider('Temperatura (°C)', -10.0, 50.0, float(temperatura))
+    umidade = st.slider('Umidade Relativa (%)', 0.0, 100.0, float(umidade))
+    velocidade_vento = st.slider('Velocidade do Vento (km/h)', 0.0, 100.0, float(velocidade_vento))
+    direcao_vento = st.slider('Direção do Vento (graus)', 0.0, 360.0, float(direcao_vento))
+    precipitacao = st.slider('Precipitação (mm)', 0.0, 200.0, float(precipitacao))
+    radiacao_solar = st.slider('Radiação Solar (W/m²)', 0.0, 1200.0, float(radiacao_solar))
     ndvi = st.slider('NDVI', 0.0, 1.0, float(ndvi))
 
-    # Soil Classification
-    st.header("Soil Classification")
-    if st.button('Classify Soil with API'):
-        # Soil profile data (simplified for the example)
+    # Classificação do solo
+    st.header("Classificação do Solo")
+    if st.button('Classificar Solo com a API'):
+        # Dados do perfil de solo (simplificado para o exemplo)
         dados_perfil = {
             "items": [
                 {
-                    "ID_PONTO": "Point1",
+                    "ID_PONTO": "Ponto1",
                     "DRENAGEM": 1,
                     "HORIZONTES": [
                         {
@@ -517,20 +554,20 @@ def main():
         }
         classificacao = classificar_solo(dados_perfil)
         if classificacao is not None:
-            st.success(f"Soil Classification: {classificacao['items'][0]['ORDEM']}")
+            st.success(f"Classificação do Solo: {classificacao['items'][0]['ORDEM']}")
             tipo_solo = classificacao['items'][0]['ORDEM']
             st.session_state.tipo_solo = tipo_solo
         else:
-            st.error("Unable to classify soil.")
-            tipo_solo = 'Unknown'
+            st.error("Não foi possível classificar o solo.")
+            tipo_solo = 'Desconhecido'
     else:
-        tipo_solo = st.session_state.get('tipo_solo', 'Unknown')
+        tipo_solo = st.session_state.get('tipo_solo', 'Desconhecido')
 
-    # Simulation Date
-    st.header("Simulation Date")
-    data_simulacao = st.date_input("Select the simulation date:", datetime.now().date())
+    # Data da Simulação
+    st.header("Data da Simulação")
+    data_simulacao = st.date_input("Selecione a data da simulação:", datetime.now().date())
 
-    # Parameters for the simulation
+    # Parâmetros para a simulação
     params = {
         'temperatura': temperatura,
         'umidade': umidade,
@@ -540,44 +577,44 @@ def main():
         'radiacao_solar': radiacao_solar,
         'ndvi': ndvi,
         'tipo_solo': tipo_solo,
-        'fator_combustivel': ndvi,  # Simplified example
+        'fator_combustivel': ndvi,  # Exemplo simplificado
         'fator_climatico': (temperatura / 40) * ((100 - umidade) / 100),
-        'fator_terreno': 1  # Can include other factors
+        'fator_terreno': 1  # Pode incluir outros fatores
     }
 
-    # Execute simulation
-    if st.button('Run Simulation'):
-        tamanho_grade = 50  # Can adjust as needed
+    # Execução da simulação
+    if st.button('Executar Simulação'):
+        tamanho_grade = 50  # Pode ajustar conforme necessário
         num_passos = 100
         simulacao = executar_simulacao(params, tamanho_grade, num_passos)
-        st.success("Simulation completed!")
+        st.success("Simulação concluída!")
 
-        # Display used parameters
-        st.header("Parameters Used")
-        st.write(pd.DataFrame.from_dict(params, orient='index', columns=['Value']))
+        # Exibição dos parâmetros utilizados
+        st.header("Parâmetros Utilizados")
+        st.write(pd.DataFrame.from_dict(params, orient='index', columns=['Valor']))
 
-        # Display simulation results
+        # Exibição dos resultados
         area_queimada = np.sum(simulacao[-1] == QUEIMADO) * (0.01 ** 2)
-        st.header("Simulation Results")
-        st.write(f"Simulation Date: {data_simulacao.strftime('%Y-%m-%d')}")
-        st.write(f"Burned Area (km²): {area_queimada}")
+        st.header("Resultados da Simulação")
+        st.write(f"Data da Simulação: {data_simulacao.strftime('%Y-%m-%d')}")
+        st.write(f"Área Queimada (km²): {area_queimada}")
 
-        # Visualization of the propagation
-        st.header("Fire Propagation Map")
+        # Visualização da propagação
+        st.header("Mapa de Propagação do Incêndio")
         gerar_mapa_propagacao(simulacao, latitude, longitude, tamanho_celula=0.01)
 
-        # Generate report
+        # Gerar relatório
         resultados = {
             'data_simulacao': data_simulacao.strftime('%Y-%m-%d'),
             'params': params,
             'resultados': {
-                'Burned Area (km²)': area_queimada
+                'Área Queimada (km²)': area_queimada
             }
         }
         pdf_bytes = gerar_relatorio_pdf(resultados)
-        st.download_button(label="Download PDF Report", data=pdf_bytes, file_name="simulation_report.pdf", mime="application/pdf")
+        st.download_button(label="Baixar Relatório em PDF", data=pdf_bytes, file_name="relatorio_simulacao.pdf", mime="application/pdf")
     else:
-        st.info("Adjust the parameters and click 'Run Simulation'.")
+        st.info("Ajuste os parâmetros e clique em 'Executar Simulação'.")
 
 if __name__ == '__main__':
     main()
