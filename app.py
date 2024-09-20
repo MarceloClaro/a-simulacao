@@ -271,7 +271,9 @@ def main():
     st.sidebar.image("logo.png", width=200)
     st.sidebar.write("""
     SATVeg - Sistema de Análise Temporal da Vegetação para buscar índices vegetativos NDVI e EVI do sensor MODIS em qualquer local da América do Sul.
+    
     Para ajudar na simulação acesse:
+    
     SATVeg: [https://www.satveg.cnptia.embrapa.br/satveg/login.html)
     """)
 
