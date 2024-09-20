@@ -153,7 +153,7 @@ def classificar_solo(dados_perfil):
     access_token = obter_token_acesso(consumer_key, consumer_secret)
     if access_token is None:
         return None
-    url = 'https://api.cnptia.embrapa.br/sibcs/v1/classification'
+    url = 'https://api.cnptia.embrapa.br/sibcs/classification'  # Atualizado
     headers = {
         'Authorization': f'Bearer {access_token}',
         'Content-Type': 'application/json'
@@ -190,7 +190,9 @@ def gerar_mapa_propagacao(simulacao, latitude, longitude, tamanho_celula):
             polygons.append(polygon)
             states.append(state)
 
-    gdf = gpd.GeoDataFrame({'geometry': polygons, 'state': states})
+    # Definir o CRS ao criar o GeoDataFrame
+    gdf = gpd.GeoDataFrame({'geometry': polygons, 'state': states}, crs='EPSG:4326')
+
     # Mapa interativo
     m = folium.Map(location=[latitude, longitude], zoom_start=10)
     folium.GeoJson(
