@@ -6,39 +6,43 @@ from streamlit_folium import st_folium
 import plotly.express as px
 import requests
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 import matplotlib.pyplot as plt
 from PIL import Image
 import geopandas as gpd
 from shapely.geometry import Polygon, Point
-import rasterio
-from rasterio.plot import show
-from rasterio.features import rasterize
 from fpdf import FPDF
 import urllib.parse  # Para codificar o endereço na URL
 
-# Definições iniciais e configurações globais
-st.set_page_config(page_title="EcoSim.ai - Simulador de Propagação de Incêndio", page_icon="🔥")
+# Configurações iniciais
+st.set_page_config(
+    page_title="EcoSim.ai - Simulador de Propagação de Incêndio",
+    page_icon="🔥",
+    layout="wide"
+)
 
-# Estados das células
+# Estados das células para a simulação
 VIVO = 0
 QUEIMANDO = 1
 QUEIMADO = 2
 
-# Cores para visualização
+# Cores para visualização no mapa
 colors = {
     VIVO: 'green',
     QUEIMANDO: 'red',
     QUEIMADO: 'black'
 }
 
-# Credenciais das APIs
+# Credenciais das APIs (lembre-se de mantê-las seguras)
 consumer_key = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
 consumer_secret = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
 
-# Funções para integração com APIs
+# Funções para integração com as APIs
 def obter_token_acesso(consumer_key, consumer_secret):
+    """
+    Obtém o token de acesso para autenticação nas APIs da Embrapa.
+    """
     token_url = 'https://api.cnptia.embrapa.br/token'
     credentials = f"{consumer_key}:{consumer_secret}"
     encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
@@ -63,6 +67,9 @@ def obter_token_acesso(consumer_key, consumer_secret):
         return None
 
 def obter_ndvi_evi(latitude, longitude, tipo_indice='ndvi', satelite='comb'):
+    """
+    Obtém a série temporal de NDVI ou EVI para a localização especificada.
+    """
     access_token = obter_token_acesso(consumer_key, consumer_secret)
     if access_token is None:
         return None, None
@@ -83,49 +90,61 @@ def obter_ndvi_evi(latitude, longitude, tipo_indice='ndvi', satelite='comb'):
         data = response.json()
         lista_ndvi_evi = data['listaSerie']
         lista_datas = data['listaDatas']
+        # Converter strings de datas para objetos datetime
+        lista_datas = [datetime.strptime(data_str, '%d/%m/%Y') for data_str in lista_datas]
         return lista_ndvi_evi, lista_datas
     else:
         st.error(f"Erro ao obter dados NDVI/EVI: {response.status_code} - {response.text}")
         return None, None
 
 def obter_dados_climaticos(latitude, longitude):
+    """
+    Obtém as séries temporais dos dados climáticos para a localização especificada.
+    """
     access_token = obter_token_acesso(consumer_key, consumer_secret)
     if access_token is None:
         return None
     variaveis = {
         'temperatura': 'tmpsfc',
         'umidade': 'rh2m',
-        'velocidade_vento': ['ugrd10m', 'vgrd10m'],
+        'vento_u': 'ugrd10m',
+        'vento_v': 'vgrd10m',
         'precipitacao': 'apcpsfc',
         'radiacao_solar': 'sunsdsfc'
     }
-    dados_climaticos = {}
+    series_temporais = {}
     for param, var_api in variaveis.items():
-        if isinstance(var_api, list):
-            # Componentes U e V do vento
-            data_execucao = obter_ultima_data_execucao(var_api[0], access_token)
-            previsao_u = obter_previsao(var_api[0], data_execucao, latitude, longitude, access_token)
-            previsao_v = obter_previsao(var_api[1], data_execucao, latitude, longitude, access_token)
-            if previsao_u is None or previsao_v is None:
-                continue
-            u = previsao_u[0]['valor']
-            v = previsao_v[0]['valor']
-            velocidade_vento = (u**2 + v**2)**0.5  # Velocidade do vento
-            direcao_vento = (np.arctan2(v, u) * 180 / np.pi) % 360  # Direção do vento em graus
-            dados_climaticos['velocidade_vento'] = velocidade_vento
-            dados_climaticos['direcao_vento'] = direcao_vento
-        else:
-            data_execucao = obter_ultima_data_execucao(var_api, access_token)
-            previsao = obter_previsao(var_api, data_execucao, latitude, longitude, access_token)
-            if previsao is None:
-                continue
-            valor = previsao[0]['valor']
+        data_execucao = obter_ultima_data_execucao(var_api, access_token)
+        previsao = obter_previsao(var_api, data_execucao, latitude, longitude, access_token)
+        if previsao is None:
+            continue
+        tempos = []
+        valores = []
+        for ponto in previsao:
+            # Converter timestamp em milissegundos para datetime
+            tempos.append(datetime.fromtimestamp(ponto['data'] / 1000))
+            valor = ponto['valor']
             if param == 'temperatura':
                 valor -= 273.15  # Converter de Kelvin para Celsius
-            dados_climaticos[param] = valor
-    return dados_climaticos
+            valores.append(valor)
+        series_temporais[param] = {'tempos': tempos, 'valores': valores}
+    # Processar velocidade e direção do vento
+    if 'vento_u' in series_temporais and 'vento_v' in series_temporais:
+        tempos = series_temporais['vento_u']['tempos']
+        u_valores = np.array(series_temporais['vento_u']['valores'])
+        v_valores = np.array(series_temporais['vento_v']['valores'])
+        velocidade_vento = np.sqrt(u_valores ** 2 + v_valores ** 2)
+        direcao_vento = (np.arctan2(v_valores, u_valores) * 180 / np.pi) % 360
+        series_temporais['velocidade_vento'] = {'tempos': tempos, 'valores': velocidade_vento.tolist()}
+        series_temporais['direcao_vento'] = {'tempos': tempos, 'valores': direcao_vento.tolist()}
+        del series_temporais['vento_u']
+        del series_temporais['vento_v']
+    return series_temporais
 
 def obter_ultima_data_execucao(variavel, access_token):
+    """
+    Obtém a última data de execução disponível para a variável climática especificada.
+    """
     url = f'https://api.cnptia.embrapa.br/climapi/v1/ncep-gfs/{variavel}'
     headers = {
         'Authorization': f'Bearer {access_token}'
@@ -138,6 +157,9 @@ def obter_ultima_data_execucao(variavel, access_token):
     return None
 
 def obter_previsao(variavel, data_execucao, latitude, longitude, access_token):
+    """
+    Obtém a previsão da variável climática especificada para a data de execução, latitude e longitude.
+    """
     url = f'https://api.cnptia.embrapa.br/climapi/v1/ncep-gfs/{variavel}/{data_execucao}/{longitude}/{latitude}'
     headers = {
         'Authorization': f'Bearer {access_token}'
@@ -150,6 +172,9 @@ def obter_previsao(variavel, data_execucao, latitude, longitude, access_token):
         return None
 
 def classificar_solo(dados_perfil):
+    """
+    Classifica o solo com base nos dados do perfil fornecidos.
+    """
     access_token = obter_token_acesso(consumer_key, consumer_secret)
     if access_token is None:
         return None
@@ -169,10 +194,15 @@ def classificar_solo(dados_perfil):
 
 # Funções auxiliares
 def coordenadas_validas(latitude, longitude):
+    """
+    Verifica se as coordenadas estão dentro dos limites da América do Sul.
+    """
     return -60.0 <= latitude <= 15.0 and -90.0 <= longitude <= -30.0
 
 def gerar_mapa_propagacao(simulacao, latitude, longitude, tamanho_celula):
-    # Criar um GeoDataFrame para visualização
+    """
+    Gera o mapa de propagação do incêndio com base na simulação.
+    """
     polygons = []
     states = []
     tamanho_grade = simulacao[0].shape[0]
@@ -207,19 +237,25 @@ def gerar_mapa_propagacao(simulacao, latitude, longitude, tamanho_celula):
     st_folium(m, width=700, height=500)
 
 def gerar_serie_historica(lista_datas, lista_ndvi_evi):
+    """
+    Gera um gráfico de série histórica para o NDVI/EVI.
+    """
     df = pd.DataFrame({'Data': pd.to_datetime(lista_datas), 'Índice': lista_ndvi_evi})
     fig = px.line(df, x='Data', y='Índice', title='Série Histórica de NDVI/EVI')
     st.plotly_chart(fig)
 
 def executar_simulacao(params, tamanho_grade, num_passos):
+    """
+    Executa a simulação de propagação de incêndio com base nos parâmetros fornecidos.
+    """
     # Inicializar a grade
     grade = np.full((tamanho_grade, tamanho_grade), VIVO)
-    # Definir ponto de ignição
+    # Definir ponto de ignição no centro
     centro = tamanho_grade // 2
     grade[centro, centro] = QUEIMANDO
     grades = [grade.copy()]
 
-    # Executar simulação
+    # Executar a simulação por num_passos passos de tempo
     for passo in range(num_passos):
         nova_grade = grade.copy()
         for i in range(tamanho_grade):
@@ -240,16 +276,23 @@ def executar_simulacao(params, tamanho_grade, num_passos):
     return grades
 
 def calcular_probabilidade_propagacao(params):
-    # Simples combinação de fatores
+    """
+    Calcula a probabilidade de propagação do fogo com base nos parâmetros fornecidos.
+    """
+    # Combinação dos fatores de combustível, climático e terreno
     prob = params['fator_combustivel'] * params['fator_climatico'] * params['fator_terreno']
     return min(max(prob, 0), 1)
 
 def gerar_relatorio_pdf(resultados):
+    """
+    Gera um relatório em PDF com os resultados da simulação.
+    """
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
 
     pdf.cell(200, 10, txt="Relatório de Simulação de Propagação de Incêndio", ln=True, align='C')
+    pdf.cell(200, 10, txt=f"Data da Simulação: {resultados['data_simulacao']}", ln=True)
 
     pdf.cell(200, 10, txt="Parâmetros Utilizados:", ln=True)
     for key, value in resultados['params'].items():
@@ -263,7 +306,9 @@ def gerar_relatorio_pdf(resultados):
     return pdf_bytes
 
 def obter_coordenadas_endereco(endereco):
-    # Usar a API Nominatim para geocodificar o endereço
+    """
+    Obtém as coordenadas (latitude e longitude) para o endereço fornecido usando a API Nominatim.
+    """
     url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(endereco)}&format=json&limit=1"
     headers = {
         'User-Agent': 'EcoSim.ai/1.0 (contato@exemplo.com)'
@@ -341,42 +386,71 @@ def main():
             st.success(f"Valor atual de {tipo_indice.upper()}: {ndvi_evi_atual}")
             gerar_serie_historica(lista_datas, lista_ndvi_evi)
             st.session_state.ndvi_evi_atual = ndvi_evi_atual
+            st.session_state.lista_ndvi_evi = lista_ndvi_evi
+            st.session_state.lista_datas_ndvi_evi = lista_datas
+            ndvi = ndvi_evi_atual
         else:
             st.error("Não foi possível obter o NDVI/EVI.")
             return
     else:
-        ndvi_evi_atual = st.session_state.get('ndvi_evi_atual', 0.5)  # Valor padrão se não obtido
+        ndvi_evi_atual = st.session_state.get('ndvi_evi_atual', 0.5)
+        ndvi = ndvi_evi_atual
+        lista_ndvi_evi = st.session_state.get('lista_ndvi_evi', [])
+        lista_datas_ndvi_evi = st.session_state.get('lista_datas_ndvi_evi', [])
+        if lista_ndvi_evi and lista_datas_ndvi_evi:
+            gerar_serie_historica(lista_datas_ndvi_evi, lista_ndvi_evi)
 
     if st.button('Obter Dados Climáticos da API'):
-        dados_climaticos = obter_dados_climaticos(latitude, longitude)
-        if dados_climaticos is not None:
+        series_temporais = obter_dados_climaticos(latitude, longitude)
+        if series_temporais:
             st.success("Dados climáticos obtidos com sucesso!")
-            st.write(dados_climaticos)
-            st.session_state.dados_climaticos = dados_climaticos
+            st.session_state.series_temporais = series_temporais
+            # Atualizar os valores dos parâmetros manuais com os dados mais recentes
+            temperatura = series_temporais['temperatura']['valores'][-1]
+            umidade = series_temporais['umidade']['valores'][-1]
+            velocidade_vento = series_temporais['velocidade_vento']['valores'][-1]
+            direcao_vento = series_temporais['direcao_vento']['valores'][-1]
+            precipitacao = series_temporais['precipitacao']['valores'][-1]
+            radiacao_solar = series_temporais['radiacao_solar']['valores'][-1]
+            # Exibir tabelas e gráficos
+            st.header("Séries Temporais Climáticas")
+            for param, data in series_temporais.items():
+                df = pd.DataFrame({'Data': data['tempos'], 'Valor': data['valores']})
+                st.subheader(f"{param.capitalize()}")
+                st.dataframe(df)
+                fig = px.line(df, x='Data', y='Valor', title=f'Série Temporal de {param.capitalize()}')
+                st.plotly_chart(fig)
         else:
             st.error("Não foi possível obter os dados climáticos.")
             return
     else:
-        dados_climaticos = st.session_state.get('dados_climaticos', {
-            'temperatura': 25,
-            'umidade': 50,
-            'velocidade_vento': 10,
-            'direcao_vento': 90,
-            'precipitacao': 0,
-            'radiacao_solar': 800
-        })
+        series_temporais = st.session_state.get('series_temporais', None)
+        if series_temporais:
+            temperatura = series_temporais['temperatura']['valores'][-1]
+            umidade = series_temporais['umidade']['valores'][-1]
+            velocidade_vento = series_temporais['velocidade_vento']['valores'][-1]
+            direcao_vento = series_temporais['direcao_vento']['valores'][-1]
+            precipitacao = series_temporais['precipitacao']['valores'][-1]
+            radiacao_solar = series_temporais['radiacao_solar']['valores'][-1]
+        else:
+            temperatura = 25
+            umidade = 50
+            velocidade_vento = 10
+            direcao_vento = 90
+            precipitacao = 0
+            radiacao_solar = 800
 
-    # Entrada de dados manuais
+    # Ajuste dos Parâmetros com os valores obtidos das APIs
     st.header("Ajuste dos Parâmetros")
     st.write("Você pode ajustar os parâmetros manualmente antes de executar a simulação.")
 
-    temperatura = st.slider('Temperatura (°C)', -10, 50, int(dados_climaticos.get('temperatura', 25)))
-    umidade = st.slider('Umidade Relativa (%)', 0, 100, int(dados_climaticos.get('umidade', 50)))
-    velocidade_vento = st.slider('Velocidade do Vento (km/h)', 0, 100, int(dados_climaticos.get('velocidade_vento', 10)))
-    direcao_vento = st.slider('Direção do Vento (graus)', 0, 360, int(dados_climaticos.get('direcao_vento', 90)))
-    precipitacao = st.slider('Precipitação (mm)', 0, 200, int(dados_climaticos.get('precipitacao', 0)))
-    radiacao_solar = st.slider('Radiação Solar (W/m²)', 0, 1200, int(dados_climaticos.get('radiacao_solar', 800)))
-    ndvi = st.slider('NDVI', 0.0, 1.0, float(ndvi_evi_atual))
+    temperatura = st.slider('Temperatura (°C)', -10, 50, float(temperatura))
+    umidade = st.slider('Umidade Relativa (%)', 0, 100, float(umidade))
+    velocidade_vento = st.slider('Velocidade do Vento (km/h)', 0, 100, float(velocidade_vento))
+    direcao_vento = st.slider('Direção do Vento (graus)', 0, 360, float(direcao_vento))
+    precipitacao = st.slider('Precipitação (mm)', 0, 200, float(precipitacao))
+    radiacao_solar = st.slider('Radiação Solar (W/m²)', 0, 1200, float(radiacao_solar))
+    ndvi = st.slider('NDVI', 0.0, 1.0, float(ndvi))
 
     # Classificação do solo
     st.header("Classificação do Solo")
@@ -423,6 +497,10 @@ def main():
     else:
         tipo_solo = st.session_state.get('tipo_solo', 'Desconhecido')
 
+    # Data da Simulação
+    st.header("Data da Simulação")
+    data_simulacao = st.date_input("Selecione a data da simulação:", datetime.now().date())
+
     # Parâmetros para a simulação
     params = {
         'temperatura': temperatura,
@@ -444,13 +522,27 @@ def main():
         num_passos = 100
         simulacao = executar_simulacao(params, tamanho_grade, num_passos)
         st.success("Simulação concluída!")
+
+        # Exibição dos parâmetros utilizados
+        st.header("Parâmetros Utilizados")
+        st.write(pd.DataFrame.from_dict(params, orient='index', columns=['Valor']))
+
+        # Exibição dos resultados
+        area_queimada = np.sum(simulacao[-1] == QUEIMADO) * (0.01 ** 2)
+        st.header("Resultados da Simulação")
+        st.write(f"Data da Simulação: {data_simulacao.strftime('%Y-%m-%d')}")
+        st.write(f"Área Queimada (km²): {area_queimada}")
+
         # Visualização da propagação
+        st.header("Mapa de Propagação do Incêndio")
         gerar_mapa_propagacao(simulacao, latitude, longitude, tamanho_celula=0.01)
+
         # Gerar relatório
         resultados = {
+            'data_simulacao': data_simulacao.strftime('%Y-%m-%d'),
             'params': params,
             'resultados': {
-                'Área Queimada (km²)': np.sum(simulacao[-1] == QUEIMADO) * (0.01 ** 2)
+                'Área Queimada (km²)': area_queimada
             }
         }
         pdf_bytes = gerar_relatorio_pdf(resultados)
