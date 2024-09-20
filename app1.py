@@ -1,5 +1,3 @@
-# Credenciais para acesso às APIs (mantenha essas informações seguras)
-
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -38,6 +36,7 @@ colors = {
 }
 
 # Chaves de API (substitua pelas suas próprias)
+
 API_KEY_OPENWEATHERMAP = '5af75d4ed5ae582e673f8d0ba4728936'
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
 EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
@@ -96,7 +95,8 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_i
 
 def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
     api_url = 'https://api.openweathermap.org/data/2.5/onecall/timemachine'
-    datas = [data_final - timedelta(days=i) for i in range((data_final - data_inicial).days + 1)]
+    # Converter datas para datetime.datetime
+    datas = [datetime.combine(data_final - timedelta(days=i), datetime.min.time()) for i in range((data_final - data_inicial).days + 1)]
     series = []
     for data in datas:
         params = {
@@ -174,8 +174,9 @@ def simular_propagacao_incendio(grade_inicial, parametros, num_passos):
 
 def criar_animacao_simulacao(grades):
     fig, ax = plt.subplots()
-    cmap = plt.colors.ListedColormap([colors[VIVO], colors[QUEIMANDO], colors[QUEIMADO], colors[RECUPERADO]])
+    cmap = plt.cm.get_cmap('brg', 4)
     im = ax.imshow(grades[0], cmap=cmap, vmin=VIVO, vmax=RECUPERADO)
+    plt.colorbar(im, ticks=range(4), label='Estado')
 
     def update(frame):
         im.set_data(grades[frame])
@@ -295,9 +296,9 @@ def main():
         if st.button("Executar Simulação"):
             # Configurar parâmetros com base nos dados obtidos
             parametros = {
-                'temperatura': meteo_series['Temperatura'].mean() if 'meteo_series' in locals() else 25,
-                'umidade': meteo_series['Umidade'].mean() if 'meteo_series' in locals() else 50,
-                'vento': meteo_series['Vento'].mean() if 'meteo_series' in locals() else 5,
+                'temperatura': meteo_series['Temperatura'].mean() if meteo_series is not None else 25,
+                'umidade': meteo_series['Umidade'].mean() if meteo_series is not None else 50,
+                'vento': meteo_series['Vento'].mean() if meteo_series is not None else 5,
                 'prob_recuperacao': prob_recuperacao
             }
 
@@ -315,6 +316,11 @@ def main():
             # Mapa de propagação final
             st.subheader("Mapa de Propagação Final")
             gerar_mapa_propagacao(grades[-1], lat, lon, tamanho_celula=0.001)
+
+            # Animação (opcional)
+            st.subheader("Animação da Simulação")
+            animacao = criar_animacao_simulacao(grades)
+            st.pyplot(animacao)
 
             # Geração de relatório
             resultados = {
