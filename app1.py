@@ -265,7 +265,10 @@ def gerar_relatorio_pdf(resultados):
 def obter_coordenadas_endereco(endereco):
     # Usar a API Nominatim para geocodificar o endereço
     url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(endereco)}&format=json&limit=1"
-    response = requests.get(url)
+    headers = {
+        'User-Agent': 'EcoSim.ai/1.0 (contato@exemplo.com)'
+    }
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
         resultado = response.json()
         if resultado:
@@ -276,7 +279,7 @@ def obter_coordenadas_endereco(endereco):
             st.error("Endereço não encontrado.")
             return None, None
     else:
-        st.error("Erro ao consultar o serviço de geocodificação.")
+        st.error(f"Erro ao consultar o serviço de geocodificação. Código de status: {response.status_code}")
         return None, None
 
 # Interface do usuário
