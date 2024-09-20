@@ -269,6 +269,12 @@ def main():
     st.subheader("Simulador de Propagação de Incêndio em Autômatos Celulares")
 
     st.sidebar.image("logo.png", width=200)
+    st.sidebar.write("""
+    Projeto Geomaker + IA 
+    SATVeg - Sistema de Análise Temporal da Vegetação - é uma ferramenta Web desenvolvida pela Embrapa Agricultura Digital, destinada ao acesso e visualização de perfis temporais dos índices vegetativos NDVI e EVI do sensor MODIS em qualquer local da América do Sul. Com atualização regular, conforme disponibilidade de imagens pelo LP-DAAC/EOS-NASA, o SATVeg fornece ao usuário uma interface Google Maps para a localização das áreas de interesse, ferramentas para filtragem das séries temporais, módulos para carregamento de arquivos vetoriais, entre outras funcionalidades.
+
+    SATVeg: [https://www.satveg.cnptia.embrapa.br/satveg/login.html)
+    """)
 
     with st.sidebar.expander("Manual de Uso"):
         st.markdown("""
@@ -379,6 +385,7 @@ Espero que esta explicação tenha ajudado a entender os processos e análises e
 ---
 Para mais detalhes, siga-me no Instagram: [Marcelo Claro](https://www.instagram.com/marceloclaro.geomaker/)
 """)
+
 
 
     params = {
