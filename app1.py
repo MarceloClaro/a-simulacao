@@ -34,8 +34,8 @@ colors = {
 }
 
 # Credenciais para acesso às APIs (mantenha essas informações seguras)
-consumer_key = 'SEU_CONSUMER_KEY_AQUI'
-consumer_secret = 'SEU_CONSUMER_SECRET_AQUI'
+consumer_key = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
+consumer_secret = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
 
 # Funções para integração com as APIs
 def obter_token_acesso(consumer_key, consumer_secret):
