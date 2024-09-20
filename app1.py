@@ -8,35 +8,34 @@ import requests
 import base64
 from datetime import datetime, timedelta
 from io import BytesIO
-import matplotlib.pyplot as plt
 from PIL import Image
 import geopandas as gpd
 from shapely.geometry import Polygon, Point
 from fpdf import FPDF
 import urllib.parse  # Para codificar o endereço na URL
 
-# Configurações iniciais
+# Configurações iniciais do Streamlit
 st.set_page_config(
     page_title="EcoSim.ai - Simulador de Propagação de Incêndio",
     page_icon="🔥",
     layout="wide"
 )
 
-# Estados das células para a simulação
-VIVO = 0
-QUEIMANDO = 1
-QUEIMADO = 2
+# Definição dos estados das células na simulação
+VIVO = 0        # Vegetação não queimada
+QUEIMANDO = 1   # Vegetação em chamas
+QUEIMADO = 2    # Vegetação já queimada
 
-# Cores para visualização no mapa
+# Cores associadas a cada estado para visualização no mapa
 colors = {
     VIVO: 'green',
     QUEIMANDO: 'red',
     QUEIMADO: 'black'
 }
 
-# Credenciais das APIs (lembre-se de mantê-las seguras)
-consumer_key = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
-consumer_secret = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
+# Credenciais para acesso às APIs (mantenha essas informações seguras)
+consumer_key = 'SEU_CONSUMER_KEY_AQUI'
+consumer_secret = 'SEU_CONSUMER_SECRET_AQUI'
 
 # Funções para integração com as APIs
 def obter_token_acesso(consumer_key, consumer_secret):
@@ -208,22 +207,25 @@ def gerar_mapa_propagacao(simulacao, latitude, longitude, tamanho_celula):
     tamanho_grade = simulacao[0].shape[0]
     for i in range(tamanho_grade):
         for j in range(tamanho_grade):
+            # Calcular as coordenadas de cada célula
             x = longitude + (j - tamanho_grade / 2) * tamanho_celula
             y = latitude + (i - tamanho_grade / 2) * tamanho_celula
+            # Criar um polígono para cada célula
             polygon = Polygon([
                 (x, y),
                 (x + tamanho_celula, y),
                 (x + tamanho_celula, y + tamanho_celula),
                 (x, y + tamanho_celula)
             ])
+            # Obter o estado da célula (VIVO, QUEIMANDO, QUEIMADO)
             state = simulacao[-1][i, j]
             polygons.append(polygon)
             states.append(state)
 
-    # Definir o CRS ao criar o GeoDataFrame
+    # Criar um GeoDataFrame com os polígonos e estados
     gdf = gpd.GeoDataFrame({'geometry': polygons, 'state': states}, crs='EPSG:4326')
 
-    # Mapa interativo
+    # Criar o mapa interativo com o Folium
     m = folium.Map(location=[latitude, longitude], zoom_start=10)
     folium.GeoJson(
         gdf,
@@ -248,29 +250,38 @@ def executar_simulacao(params, tamanho_grade, num_passos):
     """
     Executa a simulação de propagação de incêndio com base nos parâmetros fornecidos.
     """
-    # Inicializar a grade
+    # Inicializar a grade com células VIVAS
     grade = np.full((tamanho_grade, tamanho_grade), VIVO)
-    # Definir ponto de ignição no centro
+
+    # Definir ponto de ignição no centro da grade
     centro = tamanho_grade // 2
     grade[centro, centro] = QUEIMANDO
+
+    # Lista para armazenar as grades em cada passo de tempo
     grades = [grade.copy()]
 
-    # Executar a simulação por num_passos passos de tempo
+    # Executar a simulação por 'num_passos' passos de tempo
     for passo in range(num_passos):
         nova_grade = grade.copy()
         for i in range(tamanho_grade):
             for j in range(tamanho_grade):
                 if grade[i, j] == QUEIMANDO:
+                    # Célula que está queimando agora ficará QUEIMADA no próximo passo
                     nova_grade[i, j] = QUEIMADO
-                    # Propagar para vizinhos
-                    vizinhos = [(-1,0), (1,0), (0,-1), (0,1)]
+                    # Propagar o fogo para os vizinhos
+                    vizinhos = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Vizinhos ortogonais
                     for vi, vj in vizinhos:
                         ni, nj = i + vi, j + vj
+                        # Verificar se o vizinho está dentro dos limites da grade
                         if 0 <= ni < tamanho_grade and 0 <= nj < tamanho_grade:
+                            # Propagar somente para células VIVAS
                             if grade[ni, nj] == VIVO:
+                                # Calcular a probabilidade de propagação
                                 probabilidade = calcular_probabilidade_propagacao(params)
+                                # Decidir se o fogo irá propagar para a célula vizinha
                                 if np.random.rand() < probabilidade:
                                     nova_grade[ni, nj] = QUEIMANDO
+        # Atualizar a grade para o próximo passo
         grade = nova_grade
         grades.append(grade.copy())
     return grades
@@ -281,6 +292,7 @@ def calcular_probabilidade_propagacao(params):
     """
     # Combinação dos fatores de combustível, climático e terreno
     prob = params['fator_combustivel'] * params['fator_climatico'] * params['fator_terreno']
+    # Garantir que a probabilidade esteja entre 0 e 1
     return min(max(prob, 0), 1)
 
 def gerar_relatorio_pdf(resultados):
@@ -329,6 +341,9 @@ def obter_coordenadas_endereco(endereco):
 
 # Interface do usuário
 def main():
+    """
+    Função principal que controla a interface do usuário e a lógica do aplicativo.
+    """
     st.title("EcoSim.ai")
     st.subheader("Simulador Inovador de Propagação de Incêndio")
 
@@ -379,6 +394,7 @@ def main():
     tipo_indice = st.selectbox('Tipo de Índice Vegetativo', ['ndvi', 'evi'])
     satelite = st.selectbox('Satélite', ['terra', 'aqua', 'comb'])
 
+    # Obter NDVI/EVI
     if st.button('Obter NDVI/EVI da API'):
         lista_ndvi_evi, lista_datas = obter_ndvi_evi(latitude, longitude, tipo_indice, satelite)
         if lista_ndvi_evi is not None:
@@ -400,6 +416,7 @@ def main():
         if lista_ndvi_evi and lista_datas_ndvi_evi:
             gerar_serie_historica(lista_datas_ndvi_evi, lista_ndvi_evi)
 
+    # Obter dados climáticos
     if st.button('Obter Dados Climáticos da API'):
         series_temporais = obter_dados_climaticos(latitude, longitude)
         if series_temporais:
@@ -444,12 +461,12 @@ def main():
     st.header("Ajuste dos Parâmetros")
     st.write("Você pode ajustar os parâmetros manualmente antes de executar a simulação.")
 
-    temperatura = st.slider('Temperatura (°C)', -10, 50, float(temperatura))
-    umidade = st.slider('Umidade Relativa (%)', 0, 100, float(umidade))
-    velocidade_vento = st.slider('Velocidade do Vento (km/h)', 0, 100, float(velocidade_vento))
-    direcao_vento = st.slider('Direção do Vento (graus)', 0, 360, float(direcao_vento))
-    precipitacao = st.slider('Precipitação (mm)', 0, 200, float(precipitacao))
-    radiacao_solar = st.slider('Radiação Solar (W/m²)', 0, 1200, float(radiacao_solar))
+    temperatura = st.slider('Temperatura (°C)', -10.0, 50.0, float(temperatura))
+    umidade = st.slider('Umidade Relativa (%)', 0.0, 100.0, float(umidade))
+    velocidade_vento = st.slider('Velocidade do Vento (km/h)', 0.0, 100.0, float(velocidade_vento))
+    direcao_vento = st.slider('Direção do Vento (graus)', 0.0, 360.0, float(direcao_vento))
+    precipitacao = st.slider('Precipitação (mm)', 0.0, 200.0, float(precipitacao))
+    radiacao_solar = st.slider('Radiação Solar (W/m²)', 0.0, 1200.0, float(radiacao_solar))
     ndvi = st.slider('NDVI', 0.0, 1.0, float(ndvi))
 
     # Classificação do solo
