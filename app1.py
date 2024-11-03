@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
 
-# Chaves de API (substitua pelas suas próprias)
+# Chaves de API
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
 EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
 
@@ -171,10 +171,10 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         "dataInicial": data_inicial.strftime('%Y-%m-%d'),
         "dataFinal": data_final.strftime('%Y-%m-%d')
     }
-    
+
     # Requisição para obter EVI
     response_evi = requests.post(url_ndvi, headers=headers, json=payload_evi)
-    
+
     if response_evi.status_code == 200:
         data_evi = response_evi.json()
         df_evi = pd.DataFrame({
@@ -225,54 +225,42 @@ def processar_dados(hourly_df, daily_df, ndvi_df, evi_df):
 def preencher_dados_sinteticos(df):
     for column in df.columns:
         if df[column].isnull().any():  # Verifica se há NaN na coluna
-            # Gerar dados sintéticos usando média da coluna (ou outra lógica)
+            # Gerar dados sintéticos usando média da coluna
             mean_value = df[column].mean()
             df[column].fillna(mean_value, inplace=True)  # Preencher NaNs com a média
 
     return df
 
-# Definindo estados das células 
-VIVO = 0
-QUEIMANDO1 = 1
-QUEIMANDO2 = 2
-QUEIMANDO3 = 3
-QUEIMANDO4 = 4
-QUEIMADO = 5
+# Função para simular a propagação de incêndio
+def simular_incendio(df):
+    # Definindo estados das células
+    VIVO = 0
+    QUEIMANDO1 = 1
+    QUEIMANDO2 = 2
+    QUEIMANDO3 = 3
+    QUEIMANDO4 = 4
+    QUEIMADO = 5
 
-# Função para simular o incêndio usando autômatos celulares
-def simular_incendio(grid_size, initial_fire, final_df):
-    # Inicialização da grade
-    grid = np.full((grid_size, grid_size), VIVO)
-    
-    # Definindo células em estado de queima inicial
-    for (x, y) in initial_fire:
-        grid[x, y] = QUEIMANDO1
+    # Definindo probabilidades de propagação do fogo para cada estado
+    probabilidades = {
+        VIVO: 0.6,
+        QUEIMANDO1: 0.8,
+        QUEIMANDO2: 0.8,
+        QUEIMANDO3: 0.8,
+        QUEIMANDO4: 0.8,
+        QUEIMADO: 0
+    }
 
-    # Executar a simulação
-    for step in range(100):  # Número de passos de tempo
-        new_grid = grid.copy()
-        for i in range(grid_size):
-            for j in range(grid_size):
-                if grid[i, j] == QUEIMANDO1:
-                    new_grid[i, j] = QUEIMANDO2
-                elif grid[i, j] == QUEIMANDO2:
-                    new_grid[i, j] = QUEIMANDO3
-                elif grid[i, j] == QUEIMANDO3:
-                    new_grid[i, j] = QUEIMANDO4
-                elif grid[i, j] == QUEIMANDO4:
-                    new_grid[i, j] = QUEIMADO
-                    
-                    # Propagação do fogo
-                    for di in [-1, 0, 1]:
-                        for dj in [-1, 0, 1]:
-                            if 0 <= i + di < grid_size and 0 <= j + dj < grid_size:
-                                if grid[i + di, j + dj] == VIVO:
-                                    if np.random.rand() < 0.8:  # Probabilidade de propagação
-                                        new_grid[i + di, j + dj] = QUEIMANDO1
-        
-        grid = new_grid
-    
-    return grid
+    # Exemplo de como implementar a propagação (baseado em um grid 2D)
+    grid_size = 10  # Exemplo de tamanho do grid
+    grid = np.zeros((grid_size, grid_size))  # Inicializa o grid com células VIVAS
+
+    # Aqui você implementaria a lógica para mudar os estados das células
+    for step in range(10):  # Exemplo de 10 passos de simulação
+        # Implemente sua lógica de propagação do fogo aqui
+        pass  # Remova isso e adicione sua lógica
+
+    return grid  # Retorne o grid final
 
 # Interface do usuário
 def main():
@@ -318,12 +306,11 @@ def main():
                 st.write("### Dados Processados e Normalizados")
                 st.dataframe(final_df)
 
-                # Simulação do incêndio
-                grid_size = 10  # Tamanho da grade
-                initial_fire = [(5, 5)]  # Células iniciais em que o incêndio começa
-                grid = simular_incendio(grid_size, initial_fire, final_df)
-                st.write("### Estado da Simulação do Incêndio")
-                st.dataframe(grid)
+                # Simular incêndio
+                grid_result = simular_incendio(final_df)
+                st.write("### Resultados da Simulação de Incêndio")
+                st.dataframe(grid_result)
 
 if __name__ == "__main__":
     main()
+
