@@ -9,13 +9,7 @@ from datetime import datetime, timedelta
 import base64
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-import seaborn as sns
-from scipy import stats
-from sklearn.metrics import confusion_matrix
 from fpdf import FPDF
-
-# Configurações do Streamlit
-st.set_page_config(page_title="Simulador de Propagação de Incêndio", page_icon="🔥", layout="wide")
 
 # Chaves de API da Embrapa
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
@@ -25,14 +19,6 @@ EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
 cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
 retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
 openmeteo = openmeteo_requests.Client(session=retry_session)
-
-# Definindo estados das células
-VIVO = 0
-QUEIMANDO1 = 1
-QUEIMANDO2 = 2
-QUEIMANDO3 = 3
-QUEIMANDO4 = 4
-QUEIMADO = 5
 
 # Função para obter token de acesso da Embrapa
 def obter_token_acesso_embrapa(consumer_key, consumer_secret):
@@ -61,7 +47,7 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_i
         "satelite": satelite,
         "latitude": latitude,
         "longitude": longitude,
-        "dataInicial": data_inicial.strftime('%Y-%m-%d'),
+        "dataInicial": data_inicial.strftime('%Y-%m-%d'),  # Formato de data
         "dataFinal": data_final.strftime('%Y-%m-%d')
     }
     response = requests.post(url, headers=headers, json=payload)
@@ -128,13 +114,15 @@ def obter_coordenadas_endereco(endereco):
         st.error("Endereço não encontrado ou fora da América do Sul.")
         return None, None
 
-# Função para inicializar a grade do autômato celular
+# Função para simulação de propagação de incêndio usando autômatos celulares
+VIVO, QUEIMANDO1, QUEIMANDO2, QUEIMANDO3, QUEIMANDO4, QUEIMADO = 0, 1, 2, 3, 4, 5
+
 def inicializar_grade(tamanho, inicio_fogo):
     grade = np.zeros((tamanho, tamanho), dtype=int)
     grade[inicio_fogo] = QUEIMANDO1
     return grade
 
-# Função para calcular a probabilidade de propagação do fogo
+# Função para calcular a probabilidade de propagação de acordo com os parâmetros
 def calcular_probabilidade_propagacao(params, direcao_vento):
     fatores = {
         "temp": (params['temperatura'] - 20) / 30,
@@ -169,8 +157,9 @@ def aplicar_regras_fogo(grade, params, ruido, direcao_vento):
                 nova_grade[i, j] = QUEIMADO
                 vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
                 for ni, nj in vizinhos:
+                    # Implementando a influência da direção do vento
                     if grade[ni, nj] == VIVO:
-                        prob_ajustada = prob_propagacao * (1 + np.cos(np.radians(direcao_vento - 90)) / 2)
+                        prob_ajustada = prob_propagacao * (1 + np.cos(np.radians(direcao_vento - 90)) / 2)  # Ajusta a probabilidade conforme a direção do vento
                         if np.random.rand() < prob_ajustada * (1 + ruido / 50.0):
                             nova_grade[ni, nj] = QUEIMANDO1
     return nova_grade
@@ -183,6 +172,32 @@ def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido, direcao_vent
         grade = aplicar_regras_fogo(grade, params, ruido, direcao_vento)
         grades.append(grade.copy())
     return grades
+
+# Função para exibir gráficos de histogramas e margem de erro
+def plotar_histogramas_e_margem_erro(simulacao):
+    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
+
+    st.sidebar.write("### Histograma de Células Queimando")
+    fig, ax = plt.subplots()
+    ax.hist(contagem_queimando, bins=20, color='orange')
+    ax.set_title("Histograma de Células Queimando")
+    ax.set_xlabel("Número de Células Queimando")
+    ax.set_ylabel("Frequência")
+    st.sidebar.pyplot(fig)
+
+    # Gráfico de média e margem de erro
+    st.sidebar.write("### Média e Margem de Erro")
+    media_movel = pd.Series(contagem_queimando).rolling(window=5).mean()
+    std_movel = pd.Series(contagem_queimando).rolling(window=5).std()
+
+    fig, ax = plt.subplots()
+    ax.plot(media_movel, label='Média', color='blue')
+    ax.fill_between(media_movel.index, media_movel - std_movel, media_movel + std_movel, color='blue', alpha=0.2)
+    ax.set_title("Média e Margem de Erro")
+    ax.set_xlabel("Passos da Simulação")
+    ax.set_ylabel("Número de Células Queimando")
+    ax.legend()
+    st.sidebar.pyplot(fig)
 
 # Função para plotar a simulação de incêndio
 def plotar_simulacao(grades):
@@ -201,136 +216,12 @@ def plotar_simulacao(grades):
     plt.tight_layout()
     st.pyplot(fig)
 
-# Plotando histogramas e gráficos de margem de erro
-def plotar_histogramas_e_erros(simulacao):
-    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
-    contagem_queimando_df = pd.DataFrame(contagem_queimando, columns=["Células Queimando"])
-
-    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    
-    sns.histplot(contagem_queimando_df, x="Células Queimando", ax=ax[0], kde=True, bins=20, color='orange')
-    ax[0].set_title('Histograma de Células Queimando')
-    ax[0].set_xlabel('Número de Células Queimando')
-    ax[0].set_ylabel('Frequência')
-    
-    media_movel = contagem_queimando_df.rolling(window=10).mean()
-    std_movel = contagem_queimando_df.rolling(window=10).std()
-    ax[1].plot(media_movel, label='Média', color='blue')
-    ax[1].fill_between(std_movel.index, media_movel["Células Queimando"] - std_movel["Células Queimando"], media_movel["Células Queimando"] + std_movel["Células Queimando"], color='blue', alpha=0.2, label='Margem de Erro (1 std)')
-    ax[1].set_title('Média e Margem de Erro')
-    ax[1].set_xlabel('Passos da Simulação')
-    ax[1].set_ylabel('Número de Células Queimando')
-    ax[1].legend()
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
-# Calculando correlações e realizando ANOVA, Q-Exponential e matriz de confusão
-def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
-    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
-    contagem_queimando_df = pd.DataFrame(contagem_queimando, columns=["Células Queimando"])
-
-    valores_params = pd.DataFrame([{
-        'temperatura': params['temperatura'],
-        'umidade': params['umidade'],
-        'velocidade_vento': params['velocidade_vento'],
-        'direcao_vento': params['direcao_vento'],
-        'precipitacao': params['precipitacao'],
-        'radiacao_solar': params['radiacao_solar'],
-        'densidade_vegetacao': params['densidade_vegetacao'],
-        'umidade_combustivel': params['umidade_combustivel'],
-        'topografia': params['topografia'],
-        'tipo_solo': valores_tipo_solo[params['tipo_solo']],
-        'ndvi': params['ndvi'],
-        'intensidade_fogo': params['intensidade_fogo'],
-        'tempo_desde_ultimo_fogo': params['tempo_desde_ultimo_fogo'],
-        'intervencao_humana': params['intervencao_humana'],
-        'ruido': params['ruido']
-    }] * len(contagem_queimando_df))
-    
-    valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
-
-    if not df_historico_manual.empty:
-        df_historico_manual['tipo_vegetacao'] = df_historico_manual['tipo_vegetacao'].map(valores_tipo_vegetacao)
-        df_historico_manual['tipo_solo'] = df_historico_manual['tipo_solo'].map(valores_tipo_solo)
-        df_historico_manual = df_historico_manual.apply(pd.to_numeric, errors='coerce')
-        valores_params = pd.concat([valores_params, df_historico_manual], ignore_index=True)
-        valores_params = valores_params.apply(pd.to_numeric, errors='coerce')
-
-    correlacao_spearman = valores_params.corr(method='spearman')
-    st.write("### Matriz de Correlação (Spearman):")
-    st.write(correlacao_spearman)
-
-    tercios = np.array_split(contagem_queimando_df["Células Queimando"], 3)
-    f_val, p_val = stats.f_oneway(tercios[0], tercios[1], tercios[2])
-    st.write("### Resultado da ANOVA:")
-    st.write(f"F-valor: {f_val}, p-valor: {p_val}")
-
-    def q_exponencial(valores, q):
-        return (1 - (1 - q) * valores)**(1 / (1 - q))
-
-    q_valor = 1.5
-    valores_q_exponencial = q_exponencial(contagem_queimando_df["Células Queimando"], q_valor)
-    st.write("### Valores Q-Exponencial:")
-    st.write(valores_q_exponencial)
-
-    def q_estatistica(valores, q):
-        return np.sum((valores_q_exponencial - np.mean(valores_q_exponencial))**2) / len(valores_q_exponencial)
-
-    valores_q_estatistica = q_estatistica(contagem_queimando_df["Células Queimando"], q_valor)
-    st.write("### Valores Q-Estatística:")
-    st.write(valores_q_estatistica)
-
-    y_true = np.concatenate([grade.flatten() for grade in simulacao[:-1]])
-    y_pred = np.concatenate([grade.flatten() for grade in simulacao[1:]])
-    matriz_confusao = confusion_matrix(y_true, y_pred, labels=[VIVO, QUEIMANDO1, QUEIMANDO2, QUEIMANDO3, QUEIMANDO4, QUEIMADO])
-    st.write("### Matriz de Confusão:")
-    st.write(matriz_confusao)
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    sns.heatmap(matriz_confusao, annot=True, fmt='d', cmap='Blues', xticklabels=['Vivo', 'Queimando1', 'Queimando2', 'Queimando3', 'Queimando4', 'Queimado'], yticklabels=['Vivo', 'Queimando1', 'Queimando2', 'Queimando3', 'Queimando4', 'Queimado'])
-    ax.set_xlabel('Estado Previsto')
-    ax.set_ylabel('Estado Real')
-    ax.set_title('Matriz de Confusão')
-    st.pyplot(fig)
-
-    return correlacao_spearman, f_val, p_val, valores_q_exponencial, valores_q_estatistica, matriz_confusao
-
-# Gerar e baixar PDF
-def gerar_pdf(resultados):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt="Resultados da Simulação de Propagação de Incêndio", ln=True, align='C')
-    
-    for key, value in resultados.items():
-        pdf.multi_cell(0, 10, f"{key}: {value}")
-
-    return pdf.output(dest='S').encode('latin1')
-
-# Interface principal do Streamlit
+# Interface do usuário
 def main():
     st.set_page_config(page_title="EcoSim.ai - Simulador de Propagação de Incêndio", page_icon="🔥")
 
     st.title("EcoSim.ai")
     st.subheader("Simulador de Propagação de Incêndio em Autômatos Celulares")
-
-    st.sidebar.image("logo.png", width=200)
-    with st.sidebar.expander("Como encontra o NDVI e EVI para Simulação"):
-        st.markdown("""Para obter os índices NDVI e EVI da sua região e ajudar na simulação de propagação do fogo, você pode utilizar o **SATVeg - Sistema de Análise Temporal da Vegetação**. Esta ferramenta permite acessar índices vegetativos NDVI e EVI do sensor MODIS em qualquer local da América do Sul.
-        Para acessar os dados, visite o site do SATVeg:
-        [SATVeg](https://www.satveg.cnptia.embrapa.br/satveg/login.html)""")
-
-    with st.sidebar.expander("Manual de Uso"):
-        st.markdown("""### Manual de Uso
-        Este simulador permite modelar a propagação do fogo em diferentes condições ambientais. Para utilizar:
-        1. Ajuste os parâmetros de simulação usando os controles deslizantes.
-        2. Clique em "Executar Simulação" para iniciar a simulação.
-        3. Visualize os resultados da propagação do incêndio na área principal.
-        """)
-
-    with st.sidebar.expander("Explicação do Processo Matemático"):
-        st.markdown("""Olá, sou o Professor Marcelo Claro, especializado em Geografia e Educação Ambiental. Também sou entusiasta em Inteligência Artificial (IA) e Ciências de Dados. Através deste projeto, busco estimular a curiosidade e a iniciação científica entre alunos do ensino básico, promovendo uma abordagem interdisciplinar que desenvolve proficiência digital e inovação. Utilizo diversas técnicas didáticas, como analogias pertinentes, para tornar temas complexos acessíveis e despertar o interesse autodidata nos alunos.""")
 
     endereco = st.text_input("Digite a localização (ex.: cidade, endereço):")
     
@@ -378,21 +269,7 @@ def main():
             if st.button("Executar Simulação de Incêndio"):
                 simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, params, ruido, direcao_vento)
                 plotar_simulacao(simulacao)
-                plotar_histogramas_e_erros(simulacao)
-
-                correlacao_spearman, f_val, p_val, valores_q_exponencial, valores_q_estatistica, matriz_confusao = realizar_estatisticas_avancadas(simulacao, params, pd.DataFrame())
-
-                resultados = {
-                    "Matriz de Correlação (Spearman)": correlacao_spearman.to_string(),
-                    "F-valor ANOVA": f_val,
-                    "p-valor ANOVA": p_val,
-                    "Valores Q-Exponencial": valores_q_exponencial.to_string(),
-                    "Valores Q-Estatística": valores_q_estatistica,
-                    "Matriz de Confusão": matriz_confusao.tolist()
-                }
-
-                pdf_bytes = gerar_pdf(resultados)
-                st.download_button(label="Baixar PDF", data=pdf_bytes, file_name="resultados_simulacao.pdf", mime="application/pdf")
+                plotar_histogramas_e_margem_erro(simulacao)
 
 if __name__ == "__main__":
     main()
