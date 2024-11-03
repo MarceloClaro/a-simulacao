@@ -138,21 +138,10 @@ def calcular_probabilidade_propagacao(params, direcao_vento):
         "umidade_solo_0_7": (100 - params['umidade_solo_0_7']) / 100,
         "umidade_solo_7_28": (100 - params['umidade_solo_7_28']) / 100
     }
+    
+    # Cálculo da probabilidade de propagação
     prob_base = 0.3
-    prob = prob_base + 0.1 * (
-        fatores["temp"] +
-        fatores["umidade"] +
-        fatores["vento_10m"] +
-        fatores["vento_100m"] +
-        fatores["ndvi"] +
-        fatores["evi"] +
-        fatores["chuva"] +
-        fatores["nuvens"] +
-        fatores["temperatura_solo_0_7"] +
-        fatores["temperatura_solo_7_28"] +
-        fatores["umidade_solo_0_7"] +
-        fatores["umidade_solo_7_28"]
-    )
+    prob = prob_base + (0.1 * sum(fatores.values()))
     return min(max(prob, 0), 1)
 
 # Função para aplicar regras de propagação do fogo
@@ -173,9 +162,8 @@ def aplicar_regras_fogo(grade, params, ruido, direcao_vento):
                 nova_grade[i, j] = QUEIMADO
                 vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
                 for ni, nj in vizinhos:
-                    # Implementando a influência da direção do vento
                     if grade[ni, nj] == VIVO:
-                        prob_ajustada = prob_propagacao * (1 + np.cos(np.radians(direcao_vento - 90)) / 2)  # Ajusta a probabilidade conforme a direção do vento
+                        prob_ajustada = prob_propagacao * (1 + np.cos(np.radians(direcao_vento - 90)) / 2)
                         if np.random.rand() < prob_ajustada * (1 + ruido / 50.0):
                             nova_grade[ni, nj] = QUEIMANDO1
     return nova_grade
@@ -279,10 +267,10 @@ def main():
                 'evi': evi_df['EVI'].mean(),
                 'chuva': hourly_df['Precipitacao'].sum(),
                 'nuvens': hourly_df['Cobertura_Nuvens'].mean(),
-                'temperatura_solo_0_7': hourly_df['Temperatura_Solo_0_7cm'].mean(),  # Adicionado
-                'temperatura_solo_7_28': hourly_df['Temperatura_Solo_7_28cm'].mean(),  # Adicionado
-                'umidade_solo_0_7': hourly_df['Umidade_Solo_0_7cm'].mean(),  # Adicionado
-                'umidade_solo_7_28': hourly_df['Umidade_Solo_7_28cm'].mean(),  # Adicionado
+                'temperatura_solo_0_7': hourly_df['Temperatura_Solo_0_7cm'].mean(),
+                'temperatura_solo_7_28': hourly_df['Temperatura_Solo_7_28cm'].mean(),
+                'umidade_solo_0_7': hourly_df['Umidade_Solo_0_7cm'].mean(),
+                'umidade_solo_7_28': hourly_df['Umidade_Solo_7_28cm'].mean(),
             }
 
             st.write("### Configurações da Simulação")
