@@ -155,14 +155,13 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         data_ndvi = response_ndvi.json()
         df_ndvi = pd.DataFrame({
             'Data': pd.to_datetime(data_ndvi['listaDatas']),
-           
             'NDVI': data_ndvi['listaSerie']
         })
     else:
         df_ndvi = None
         st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
 
-    # Parâmetros para a requisição de EVI
+       # Parâmetros para a requisição de EVI
     payload_evi = {
         "tipoPerfil": "evi",
         "satelite": "comb",
@@ -194,6 +193,12 @@ def processar_dados(hourly_df, daily_df, ndvi_df, evi_df):
     daily_df['Data'] = pd.to_datetime(daily_df['Data'])
     ndvi_df['Data'] = pd.to_datetime(ndvi_df['Data'])
     evi_df['Data'] = pd.to_datetime(evi_df['Data'])
+
+    # Verificar e remover o timezone se necessário
+    hourly_df['Data'] = hourly_df['Data'].dt.tz_localize(None)
+    daily_df['Data'] = daily_df['Data'].dt.tz_localize(None)
+    ndvi_df['Data'] = ndvi_df['Data'].dt.tz_localize(None)
+    evi_df['Data'] = evi_df['Data'].dt.tz_localize(None)
 
     # Merge dos DataFrames
     merged_df = pd.merge(hourly_df, ndvi_df, on='Data', how='outer')
@@ -253,8 +258,9 @@ def main():
 
             # Processar dados
             final_df = processar_dados(hourly_df, daily_df, ndvi_df, evi_df)
-            st.write("### Dados Processados e Normalizados")
-            st.dataframe(final_df)
+            if final_df is not None:
+                st.write("### Dados Processados e Normalizados")
+                st.dataframe(final_df)
 
 if __name__ == "__main__":
     main()
