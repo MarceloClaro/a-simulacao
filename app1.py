@@ -6,6 +6,7 @@ from retry_requests import retry
 import requests
 import base64
 from datetime import datetime, timedelta
+from sklearn.preprocessing import MinMaxScaler
 
 # Chaves de API (substitua pelas suas próprias)
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
@@ -160,6 +161,16 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         df_ndvi = None
         st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
 
+# Função para obter EVI da Embrapa
+def obter_evi_embrapa(latitude, longitude, data_inicial, data_final):
+    access_token = obter_token_acesso_embrapa(EMBRAPA_CONSUMER_KEY, EMBRAPA_CONSUMER_SECRET)
+    
+    if not access_token:
+        return None
+    
+    # URL da API para EVI
+    url_evi = 'https://api.cnptia.embrapa.br/satveg/v2/series'
+    
     # Parâmetros para a requisição de EVI
     payload_evi = {
         "tipoPerfil": "evi",
@@ -170,8 +181,10 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         "dataFinal": data_final.strftime('%Y-%m-%d')
     }
     
+    headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
+    
     # Requisição para obter EVI
-    response_evi = requests.post(url_ndvi, headers=headers, json=payload_evi)
+    response_evi = requests.post(url_evi, headers=headers, json=payload_evi)
     
     if response_evi.status_code == 200:
         data_evi = response_evi.json()
@@ -179,11 +192,29 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
             'Data': pd.to_datetime(data_evi['listaDatas']),
             'EVI': data_evi['listaSerie']
         })
+        return df_evi
     else:
-        df_evi = None
         st.error(f"Erro ao obter EVI: {response_evi.status_code} - {response_evi.json().get('user_message', '')}")
+        return None
 
-    return df_ndvi, df_evi
+# Função para processar dados meteorológicos e de vegetação
+def processar_dados(hourly_df, daily_df, ndvi_df, evi_df):
+    # Juntar DataFrames
+    merged_df = pd.merge(hourly_df, ndvi_df, on='Data', how='outer')
+    merged_df = pd.merge(merged_df, evi_df, on='Data', how='outer')
+
+    # Tratamento de dados - removendo NaNs
+    merged_df.fillna(method='ffill', inplace=True)  # Preencher NaNs com o último valor válido
+
+    # Normalização
+    scaler = MinMaxScaler()
+    normalized_data = scaler.fit_transform(merged_df.select_dtypes(include=['float64', 'int64']))
+    normalized_df = pd.DataFrame(normalized_data, columns=merged_df.select_dtypes(include=['float64', 'int64']).columns)
+
+    # Juntar a coluna 'Data' com os dados normalizados
+    final_df = pd.concat([merged_df['Data'], normalized_df], axis=1)
+
+    return final_df
 
 # Interface do usuário
 def main():
@@ -213,13 +244,19 @@ def main():
                 st.dataframe(daily_df)
             
             # Obter NDVI e EVI
-            ndvi_df, evi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final)
+            ndvi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final)
+            evi_df = obter_evi_embrapa(latitude, longitude, data_inicial, data_final)
             if ndvi_df is not None:
                 st.write("### Dados de NDVI")
                 st.dataframe(ndvi_df)
             if evi_df is not None:
                 st.write("### Dados de EVI")
                 st.dataframe(evi_df)
+
+            # Processar os dados
+            final_df = processar_dados(hourly_df, daily_df, ndvi_df, evi_df)
+            st.write("### Dados Processados (Normalizados)")
+            st.dataframe(final_df)
 
 if __name__ == "__main__":
     main()
