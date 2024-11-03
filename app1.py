@@ -121,6 +121,54 @@ def inicializar_grade(tamanho, inicio_fogo):
     grade[inicio_fogo] = QUEIMANDO1
     return grade
 
+# Função para calcular a probabilidade de propagação de acordo com os parâmetros
+def calcular_probabilidade_propagacao(params, direcao_vento):
+    fatores = {
+        "temp": (params['temperatura'] - 20) / 30,
+        "umidade": (100 - params['umidade']) / 100,
+        "vento_10m": params['vento_10m'] / 50,
+        "vento_100m": params['vento_100m'] / 50,
+        "ndvi": params['ndvi'],
+        "evi": params['evi'],
+        "chuva": (50 - params['chuva']) / 50,
+        "nuvens": (100 - params['nuvens']) / 100,
+        "direcao_vento": direcao_vento / 360
+    }
+    prob_base = 0.3
+    prob = prob_base + 0.1 * sum(fatores.values())
+    return min(max(prob, 0), 1)
+
+# Função para aplicar regras de propagação do fogo
+def aplicar_regras_fogo(grade, params, ruido, direcao_vento):
+    nova_grade = grade.copy()
+    tamanho = grade.shape[0]
+    prob_propagacao = calcular_probabilidade_propagacao(params, direcao_vento)
+
+    for i in range(1, tamanho - 1):
+        for j in range(1, tamanho - 1):
+            if grade[i, j] == QUEIMANDO1:
+                nova_grade[i, j] = QUEIMANDO2
+            elif grade[i, j] == QUEIMANDO2:
+                nova_grade[i, j] = QUEIMANDO3
+            elif grade[i, j] == QUEIMANDO3:
+                nova_grade[i, j] = QUEIMANDO4
+            elif grade[i, j] == QUEIMANDO4:
+                nova_grade[i, j] = QUEIMADO
+                vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
+                for ni, nj in vizinhos:
+                    if grade[ni, nj] == VIVO and np.random.rand() < prob_propagacao * (1 + ruido / 50.0):
+                        nova_grade[ni, nj] = QUEIMANDO1
+    return nova_grade
+
+# Função para executar a simulação
+def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido, direcao_vento):
+    grade = inicializar_grade(tamanho, inicio_fogo)
+    grades = [grade.copy()]
+    for _ in range(passos):
+        grade = aplicar_regras_fogo(grade, params, ruido, direcao_vento)
+        grades.append(grade.copy())
+    return grades
+
 # Função para exibir gráficos de histogramas e margem de erro
 def plotar_histogramas_e_margem_erro(simulacao):
     contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
@@ -208,9 +256,10 @@ def main():
             passos = st.slider("Número de Passos da Simulação", 10, 200, 100)
             inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
             ruido = st.slider("Nível de Ruído", 1, 100, 10)
+            direcao_vento = st.slider("Direção do Vento (graus)", 0, 360, 90)
 
             if st.button("Executar Simulação de Incêndio"):
-                simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, params, ruido)
+                simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, params, ruido, direcao_vento)
                 plotar_simulacao(simulacao)
                 plotar_histogramas_e_margem_erro(simulacao)
 
