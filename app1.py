@@ -231,6 +231,49 @@ def preencher_dados_sinteticos(df):
 
     return df
 
+# Definindo estados das células 
+VIVO = 0
+QUEIMANDO1 = 1
+QUEIMANDO2 = 2
+QUEIMANDO3 = 3
+QUEIMANDO4 = 4
+QUEIMADO = 5
+
+# Função para simular o incêndio usando autômatos celulares
+def simular_incendio(grid_size, initial_fire, final_df):
+    # Inicialização da grade
+    grid = np.full((grid_size, grid_size), VIVO)
+    
+    # Definindo células em estado de queima inicial
+    for (x, y) in initial_fire:
+        grid[x, y] = QUEIMANDO1
+
+    # Executar a simulação
+    for step in range(100):  # Número de passos de tempo
+        new_grid = grid.copy()
+        for i in range(grid_size):
+            for j in range(grid_size):
+                if grid[i, j] == QUEIMANDO1:
+                    new_grid[i, j] = QUEIMANDO2
+                elif grid[i, j] == QUEIMANDO2:
+                    new_grid[i, j] = QUEIMANDO3
+                elif grid[i, j] == QUEIMANDO3:
+                    new_grid[i, j] = QUEIMANDO4
+                elif grid[i, j] == QUEIMANDO4:
+                    new_grid[i, j] = QUEIMADO
+                    
+                    # Propagação do fogo
+                    for di in [-1, 0, 1]:
+                        for dj in [-1, 0, 1]:
+                            if 0 <= i + di < grid_size and 0 <= j + dj < grid_size:
+                                if grid[i + di, j + dj] == VIVO:
+                                    if np.random.rand() < 0.8:  # Probabilidade de propagação
+                                        new_grid[i + di, j + dj] = QUEIMANDO1
+        
+        grid = new_grid
+    
+    return grid
+
 # Interface do usuário
 def main():
     st.set_page_config(page_title="Simulador de Incêndio", page_icon="🔥")
@@ -275,6 +318,12 @@ def main():
                 st.write("### Dados Processados e Normalizados")
                 st.dataframe(final_df)
 
+                # Simulação do incêndio
+                grid_size = 10  # Tamanho da grade
+                initial_fire = [(5, 5)]  # Células iniciais em que o incêndio começa
+                grid = simular_incendio(grid_size, initial_fire, final_df)
+                st.write("### Estado da Simulação do Incêndio")
+                st.dataframe(grid)
+
 if __name__ == "__main__":
     main()
-
