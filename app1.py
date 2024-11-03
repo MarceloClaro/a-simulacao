@@ -7,6 +7,7 @@ import requests
 import base64
 from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
+import numpy as np
 
 # Chaves de API (substitua pelas suas próprias)
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
@@ -161,7 +162,8 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         df_ndvi = None
         st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
 
-       # Parâmetros para a requisição de EVI
+    # Parâmetros para a requisição de EVI
+    # Parâmetros para a requisição de EVI
     payload_evi = {
         "tipoPerfil": "evi",
         "satelite": "comb",
@@ -220,6 +222,21 @@ def processar_dados(hourly_df, daily_df, ndvi_df, evi_df):
 
     return merged_df
 
+# Função para gerar dados sintéticos para preencher NaNs
+def preencher_dados_ausentes(df):
+    # Preencher dados ausentes com a média ou interpolação
+    for column in df.columns:
+        if df[column].isnull().any():
+            # Preenchendo com a média, caso haja dados
+            if df[column].dtype in [np.float64, np.int64]:  # Verificando se é numérico
+                mean_value = df[column].mean()
+                df[column].fillna(mean_value, inplace=True)
+            else:
+                # Caso contrário, interpolar
+                df[column].interpolate(method='linear', inplace=True)
+
+    return df
+
 # Interface do usuário
 def main():
     st.set_page_config(page_title="Simulador de Incêndio", page_icon="🔥")
@@ -258,6 +275,7 @@ def main():
 
             # Processar dados
             final_df = processar_dados(hourly_df, daily_df, ndvi_df, evi_df)
+            final_df = preencher_dados_ausentes(final_df)  # Preencher dados ausentes
             if final_df is not None:
                 st.write("### Dados Processados e Normalizados")
                 st.dataframe(final_df)
