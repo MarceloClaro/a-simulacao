@@ -163,12 +163,6 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
     else:
         df_ndvi = None
         st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
-            'NDVI': data_ndvi['listaSerie']
-                                                                      
-        })
-    else:
-        df_ndvi = None
-        st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
 
     # Parâmetros para a requisição de EVI
     payload_evi = {
@@ -179,10 +173,10 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         "dataInicial": data_inicial.strftime('%Y-%m-%d'),
         "dataFinal": data_final.strftime('%Y-%m-%d')
     }
-    
+
     # Requisição para obter EVI
     response_evi = requests.post(url_ndvi, headers=headers, json=payload_evi)
-    
+
     if response_evi.status_code == 200:
         data_evi = response_evi.json()
         df_evi = pd.DataFrame({
@@ -216,11 +210,13 @@ def processar_dados(hourly_df, daily_df, ndvi_df, evi_df):
 
     # Normalização dos dados (exemplo com Min-Max)
     scaler = MinMaxScaler()
-    columns_to_normalize = ['Temperatura_2m', 'Umidade_Relativa_2m', 'Temperatura_Aparente', 
-                             'Chuva', 'Pressao_Superficial', 'Evapotranspiracao', 
-                             'Deficit_Vapor', 'Velocidade_Vento_10m', 
-                             'Velocidade_Vento_100m', 'Temperatura_Max', 
-                             'Temperatura_Min', 'Precipitacao_Total', 'NDVI', 'EVI']
+    columns_to_normalize = [
+        'Temperatura_2m', 'Umidade_Relativa_2m', 'Temperatura_Aparente',
+        'Chuva', 'Pressao_Superficial', 'Evapotranspiracao',
+        'Deficit_Vapor', 'Velocidade_Vento_10m',
+        'Velocidade_Vento_100m', 'Temperatura_Max',
+        'Temperatura_Min', 'Precipitacao_Total', 'NDVI', 'EVI'
+    ]
 
     # Aplicar a normalização somente nas colunas que existem no DataFrame
     for col in columns_to_normalize:
@@ -354,6 +350,7 @@ def main():
             if evi_df is not None:
                 st.write("### Dados de EVI")
                 st.dataframe(evi_df)
+
             # Processar dados
             final_df = processar_dados(hourly_df, daily_df, ndvi_df, evi_df)
             if final_df is not None:
@@ -391,4 +388,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
