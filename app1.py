@@ -7,6 +7,8 @@ from retry_requests import retry
 import openmeteo_requests
 from datetime import datetime, timedelta
 import base64
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
 # Configurações iniciais do Streamlit
 st.set_page_config(
@@ -83,31 +85,12 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
         "longitude": longitude,
         "start_date": data_inicial.strftime('%Y-%m-%d'),
         "end_date": data_final.strftime('%Y-%m-%d'),
-        "hourly": [
-            "temperature_2m", "relative_humidity_2m", "apparent_temperature",
-            "surface_pressure", "cloud_cover", "cloud_cover_low", "cloud_cover_mid", 
-            "cloud_cover_high", "et0_fao_evapotranspiration", "vapour_pressure_deficit", 
-            "wind_speed_10m", "wind_speed_100m", "wind_direction_10m", "wind_direction_100m", 
-            "wind_gusts_10m", "soil_temperature_0_to_7cm", "soil_temperature_7_to_28cm", 
-            "soil_temperature_28_to_100cm", "soil_temperature_100_to_255cm", 
-            "soil_moisture_0_to_7cm", "soil_moisture_7_to_28cm", 
-            "soil_moisture_28_to_100cm", "soil_moisture_100_to_255cm"
-        ],
-        "daily": [
-            "temperature_2m_max", "temperature_2m_min", "temperature_2m_mean",
-            "apparent_temperature_max", "apparent_temperature_min", "apparent_temperature_mean",
-            "sunrise", "sunset", "daylight_duration", "sunshine_duration", 
-            "precipitation_sum", "rain_sum", "precipitation_hours", 
-            "wind_speed_10m_max", "wind_gusts_10m_max", 
-            "wind_direction_10m_dominant", "shortwave_radiation_sum", 
-            "et0_fao_evapotranspiration"
-        ]
+        "hourly": ["temperature_2m", "relative_humidity_2m", "wind_speed_10m", "wind_direction_10m"],
     }
     
     responses = openmeteo.weather_api(url, params=params)
     response = responses[0]
 
-    # Processamento de dados horários
     hourly = response.Hourly()
     hourly_data = {
         "Data": pd.date_range(
@@ -118,61 +101,12 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
         ),
         "Temperatura_2m": hourly.Variables(0).ValuesAsNumpy(),
         "Umidade_Relativa_2m": hourly.Variables(1).ValuesAsNumpy(),
-        "Temperatura_Aparente": hourly.Variables(2).ValuesAsNumpy(),
-        "Pressao_Superficie": hourly.Variables(3).ValuesAsNumpy(),
-        "Cobertura_Nuvens": hourly.Variables(4).ValuesAsNumpy(),
-        "Cobertura_Nuvens_Baixa": hourly.Variables(5).ValuesAsNumpy(),
-        "Cobertura_Nuvens_Media": hourly.Variables(6).ValuesAsNumpy(),
-        "Cobertura_Nuvens_Alta": hourly.Variables(7).ValuesAsNumpy(),
-        "Evapotranspiracao_ET0_FAO": hourly.Variables(8).ValuesAsNumpy(),
-        "Deficit_Pressao_Vapor": hourly.Variables(9).ValuesAsNumpy(),
-        "Velocidade_Vento_10m": hourly.Variables(10).ValuesAsNumpy(),
-        "Velocidade_Vento_100m": hourly.Variables(11).ValuesAsNumpy(),
-        "Direcao_Vento_10m": hourly.Variables(12).ValuesAsNumpy(),
-        "Direcao_Vento_100m": hourly.Variables(13).ValuesAsNumpy(),
-        "Rajadas_Vento_10m": hourly.Variables(14).ValuesAsNumpy(),
-        "Temperatura_Solo_0_7cm": hourly.Variables(15).ValuesAsNumpy(),
-        "Temperatura_Solo_7_28cm": hourly.Variables(16).ValuesAsNumpy(),
-        "Temperatura_Solo_28_100cm": hourly.Variables(17).ValuesAsNumpy(),
-        "Temperatura_Solo_100_255cm": hourly.Variables(18).ValuesAsNumpy(),
-        "Umidade_Solo_0_7cm": hourly.Variables(19).ValuesAsNumpy(),
-        "Umidade_Solo_7_28cm": hourly.Variables(20).ValuesAsNumpy(),
-        "Umidade_Solo_28_100cm": hourly.Variables(21).ValuesAsNumpy(),
-        "Umidade_Solo_100_255cm": hourly.Variables(22).ValuesAsNumpy()
+        "Velocidade_Vento_10m": hourly.Variables(2).ValuesAsNumpy(),
+        "Direcao_Vento_10m": hourly.Variables(3).ValuesAsNumpy(),
     }
     hourly_df = pd.DataFrame(hourly_data)
-
-    # Processamento de dados diários
-    daily = response.Daily()
-    daily_data = {
-        "Data": pd.date_range(
-            start=pd.to_datetime(daily.Time(), unit="s", utc=True),
-            end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),
-            freq=pd.Timedelta(seconds=daily.Interval()),
-            inclusive="left"
-        ),
-        "Temperatura_Maxima_2m": daily.Variables(0).ValuesAsNumpy(),
-        "Temperatura_Minima_2m": daily.Variables(1).ValuesAsNumpy(),
-        "Temperatura_Media_2m": daily.Variables(2).ValuesAsNumpy(),
-        "Temperatura_Aparente_Maxima": daily.Variables(3).ValuesAsNumpy(),
-        "Temperatura_Aparente_Minima": daily.Variables(4).ValuesAsNumpy(),
-        "Temperatura_Aparente_Media": daily.Variables(5).ValuesAsNumpy(),
-        "Nascer_do_Sol": daily.Variables(6).ValuesAsNumpy(),
-        "Por_do_Sol": daily.Variables(7).ValuesAsNumpy(),
-        "Duracao_do_Dia": daily.Variables(8).ValuesAsNumpy(),
-        "Duracao_do_Sol": daily.Variables(9).ValuesAsNumpy(),
-        "Precipitacao_Total": daily.Variables(10).ValuesAsNumpy(),
-        "Chuva_Total": daily.Variables(11).ValuesAsNumpy(),
-        "Horas_de_Precipitacao": daily.Variables(12).ValuesAsNumpy(),
-        "Velocidade_Maxima_Vento_10m": daily.Variables(13).ValuesAsNumpy(),
-        "Rajadas_Maximas_Vento_10m": daily.Variables(14).ValuesAsNumpy(),
-        "Direcao_Dominante_Vento_10m": daily.Variables(15).ValuesAsNumpy(),
-        "Radiacao_Curta_Total": daily.Variables(16).ValuesAsNumpy(),
-        "Evapotranspiracao_Total": daily.Variables(17).ValuesAsNumpy()
-    }
-    daily_df = pd.DataFrame(daily_data)
     
-    return hourly_df, daily_df
+    return hourly_df
 
 # Função para obter coordenadas de uma localidade usando Nominatim
 def obter_coordenadas_endereco(endereco):
@@ -186,12 +120,54 @@ def obter_coordenadas_endereco(endereco):
         st.error("Endereço não encontrado.")
         return None, None
 
+# Função para simulação de propagação de incêndio usando autômatos celulares
+VIVO = 0
+QUEIMANDO = 1
+QUEIMADO = 2
+
+def inicializar_grade(tamanho, inicio_fogo):
+    grade = np.full((tamanho, tamanho), VIVO)
+    grade[inicio_fogo] = QUEIMANDO
+    return grade
+
+def aplicar_regras_fogo(grade, prob_propagacao, direcao_vento):
+    nova_grade = grade.copy()
+    tamanho = grade.shape[0]
+
+    for i in range(1, tamanho - 1):
+        for j in range(1, tamanho - 1):
+            if grade[i, j] == QUEIMANDO:
+                nova_grade[i, j] = QUEIMADO
+                vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
+                for ni, nj in vizinhos:
+                    if grade[ni, nj] == VIVO and np.random.rand() < prob_propagacao:
+                        nova_grade[ni, nj] = QUEIMANDO
+    return nova_grade
+
+def executar_simulacao(tamanho, passos, inicio_fogo, prob_propagacao, direcao_vento):
+    grade = inicializar_grade(tamanho, inicio_fogo)
+    grades = [grade.copy()]
+
+    for _ in range(passos):
+        grade = aplicar_regras_fogo(grade, prob_propagacao, direcao_vento)
+        grades.append(grade.copy())
+
+    return grades
+
+def plotar_simulacao(grades):
+    fig, ax = plt.subplots(figsize=(6, 6))
+    cmap = ListedColormap(['green', 'red', 'black'])
+
+    for grade in grades:
+        ax.imshow(grade, cmap=cmap, interpolation='nearest')
+        plt.pause(0.1)
+    st.pyplot(fig)
+
 # Interface do usuário
 def main():
     st.title("Simulador de Propagação de Incêndio")
     st.subheader("Automação de Parâmetros Usando APIs")
 
-    # Seleção de localização e período
     st.header("Seleção de Localização e Período de Análise")
     endereco = st.text_input("Digite a localização (ex.: cidade, endereço):")
     
@@ -205,30 +181,34 @@ def main():
         else:
             st.error("Por favor, insira uma localização válida.")
     
-    # Utilização de coordenadas armazenadas
     if 'latitude' in st.session_state and 'longitude' in st.session_state:
         latitude = st.session_state['latitude']
         longitude = st.session_state['longitude']
 
-        data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=14))
+        data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
         data_final = st.date_input("Data Final", datetime.now())
 
         if st.button("Obter Dados Meteorológicos e Índices de Vegetação"):
-            hourly_df, daily_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
+            hourly_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
             ndvi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi')
-            evi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='evi')
-            
-            st.write("### Dados Meteorológicos Horários")
+
+            st.write("### Dados Meteorológicos")
             st.write(hourly_df)
-            
-            st.write("### Dados Meteorológicos Diários")
-            st.write(daily_df)
-            
             st.write("### Índice NDVI")
             st.write(ndvi_df)
-            
-            st.write("### Índice EVI")
-            st.write(evi_df)
+
+            if not hourly_df.empty and not ndvi_df.empty:
+                prob_propagacao = hourly_df['Temperatura_2m'].mean() * 0.01  # Exemplo de cálculo com temperatura
+                direcao_vento = hourly_df['Direcao_Vento_10m'].mode()[0]
+
+                st.subheader("Configurações da Simulação")
+                tamanho_grade = st.slider("Tamanho da Grade", 10, 100, 50)
+                passos = st.slider("Número de Passos da Simulação", 10, 200, 100)
+                inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
+
+                if st.button("Executar Simulação de Incêndio"):
+                    simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, prob_propagacao, direcao_vento)
+                    plotar_simulacao(simulacao)
 
 if __name__ == '__main__':
     main()
