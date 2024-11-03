@@ -76,6 +76,10 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_i
 # Interface principal do Streamlit
 def main():
     st.title("Simulador de Propagação de Incêndio com Dados NDVI e Meteorológicos")
+    
+    # Inicializar latitude e longitude
+    latitude, longitude = None, None
+    
     endereco = st.text_input("Digite a localização (cidade, endereço ou coordenadas):")
 
     if st.button("Obter Coordenadas"):
@@ -89,7 +93,7 @@ def main():
     data_final = st.date_input("Data Final", datetime.now())
 
     # Buscar NDVI e EVI
-    if latitude and longitude:
+    if latitude is not None and longitude is not None:
         tipo_indice = st.selectbox("Selecione o Índice Vegetativo", ["ndvi", "evi"])
         if st.button("Obter NDVI/EVI"):
             ndvi_evi_series = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice=tipo_indice)
