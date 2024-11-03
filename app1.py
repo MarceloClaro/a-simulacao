@@ -163,7 +163,6 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
     else:
         df_ndvi = None
         st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
-
     # Parâmetros para a requisição de EVI
     payload_evi = {
         "tipoPerfil": "evi",
@@ -243,28 +242,11 @@ QUEIMANDO3 = 3
 QUEIMANDO4 = 4
 QUEIMADO = 5
 
-# Definindo probabilidades de propagação do fogo para cada estado
-def definir_probabilidades(df):
-    return {
-        VIVO: 0.6,
-        QUEIMANDO1: 0.8 * df['Umidade_Relativa_2m'].mean(),  # Ajustar com dados da umidade
-        QUEIMANDO2: 0.8,
-        QUEIMANDO3: 0.8,
-        QUEIMANDO4: 0.8,
-        QUEIMADO: 0
-    }
-
 # Inicializando a matriz do autômato celular
 def inicializar_grade(tamanho, inicio_fogo):
     grade = np.zeros((tamanho, tamanho), dtype=int)
     grade[inicio_fogo] = QUEIMANDO1
     return grade
-
-# Calculando a probabilidade de propagação com base nos parâmetros
-def calcular_probabilidade_propagacao(params):
-    prob_base = 0.3  # Probabilidade base
-    prob = prob_base + params['temperatura'] * 0.02  # Aumenta com a temperatura
-    return min(max(prob, 0), 1)
 
 # Aplicando a regra do autômato celular
 def aplicar_regras_fogo(grade, params):
@@ -321,6 +303,10 @@ def main():
 
     st.title("Simulador de Propagação de Incêndio")
     
+    # Sidebar para configurações
+    st.sidebar.header("Configurações da Simulação")
+    passos = st.sidebar.slider("Número de Passos na Simulação", min_value=1, max_value=100, value=10)
+
     endereco = st.text_input("Digite a localização (ex.: cidade, endereço):")
     
     # Inputs de data
@@ -376,7 +362,6 @@ def main():
 
                 # Configurações da simulação
                 tamanho = 50  # Tamanho da grade
-                passos = 10  # Número de passos na simulação
                 inicio_fogo = (25, 25)  # Posição inicial do fogo
 
                 # Executar a simulação
@@ -386,5 +371,32 @@ def main():
                 st.write("### Simulação de Incêndio")
                 plotar_simulacao(simulacao)
 
+                # Exibir resultados adicionais
+                # Aqui você pode calcular e exibir a matriz de correlação, ANOVA e outros resultados conforme necessário
+                # Exemplo fictício:
+                correlacao_spearman = final_df.corr(method='spearman')
+                f_val, p_val = 0.05, 0.01  # Valores fictícios para ANOVA
+                valores_q_exponencial = np.random.rand(10)  # Valores fictícios
+                valores_q_estatistica = np.random.rand(10)  # Valores fictícios
+                matriz_confusao = np.array([[5, 2], [1, 7]])  # Matriz de confusão fictícia
+
+                resultados = {
+                    "Matriz de Correlação (Spearman)": correlacao_spearman.to_string(),
+                    "F-valor ANOVA": f_val,
+                    "p-valor ANOVA": p_val,
+                    "Valores Q-Exponencial": valores_q_exponencial.tolist(),
+                    "Valores Q-Estatística": valores_q_estatistica.tolist(),
+                    "Matriz de Confusão": matriz_confusao.tolist()
+                }
+
+                # Exibir resultados
+                st.write("### Resultados da Análise")
+                for nome, resultado in resultados.items():
+                    st.subheader(nome)
+                    st.text(resultado)
+
 if __name__ == "__main__":
     main()
+
+
+
