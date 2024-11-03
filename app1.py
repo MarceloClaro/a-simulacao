@@ -155,12 +155,13 @@ def aplicar_regras_fogo(grade, params, ruido, direcao_vento):
         for j in range(1, tamanho - 1):
             if grade[i, j] == QUEIMANDO1:
                 nova_grade[i, j] = QUEIMANDO2
+            elif grade[i, j] == QUEIMANDO2:
                 nova_grade[i, j] = QUEIMANDO3
             elif grade[i, j] == QUEIMANDO3:
                 nova_grade[i, j] = QUEIMANDO4
             elif grade[i, j] == QUEIMANDO4:
                 nova_grade[i, j] = QUEIMADO
-                vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
+                vizinhos = [(i-1, j), (i+1, j                ), (i, j-1), (i, j+1)]
                 for ni, nj in vizinhos:
                     if grade[ni, nj] == VIVO:
                         prob_ajustada = prob_propagacao * (1 + np.cos(np.radians(direcao_vento - 90)) / 2)
@@ -179,13 +180,7 @@ def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido, direcao_vent
 
 # Função para exibir gráficos de histogramas e margem de erro
 def plotar_histogramas_e_margem_erro(simulacao):
-    contagem_queimando = [
-        np.sum(grade == QUEIMANDO1) + 
-        np.sum(grade == QUEIMANDO2) + 
-        np.sum(grade == QUEIMANDO3) + 
-        np.sum(grade == QUEIMANDO4) 
-        for grade in simulacao
-    ]
+    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
 
     st.sidebar.write("### Histograma de Células Queimando")
     fig, ax = plt.subplots()
@@ -237,11 +232,8 @@ def plotar_correlacao(params):
     # Convertendo os parâmetros em um DataFrame
     df_params = pd.DataFrame([params])
     
-    # Verificando se todos os dados são válidos e não possuem NaN
-    if df_params.isnull().values.any():
-        st.warning("Os dados contêm valores ausentes, a matriz de correlação pode não ser representativa.")
-        # Preencher NaNs com a média das colunas
-        df_params.fillna(df_params.mean(), inplace=True)
+    # Tratamento de NaN, se houver
+    df_params.fillna(0, inplace=True)  # Substitui NaNs por 0 ou outro valor desejado
 
     # Calculando a matriz de correlação
     correlacao = df_params.corr()
@@ -317,3 +309,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
