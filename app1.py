@@ -36,7 +36,6 @@ colors = {
 }
 
 # Chaves de API (substitua pelas suas próprias)
-
 API_KEY_OPENWEATHERMAP = '5af75d4ed5ae582e673f8d0ba4728936'
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
 EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
@@ -53,7 +52,6 @@ def obter_token_acesso_embrapa(consumer_key, consumer_secret):
     }
 
     data = {'grant_type': 'client_credentials'}
-
     response = requests.post(token_url, headers=headers, data=data)
 
     if response.status_code == 200:
@@ -95,7 +93,6 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_i
 
 def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
     api_url = 'https://api.openweathermap.org/data/2.5/onecall/timemachine'
-    # Converter datas para datetime.datetime
     datas = [datetime.combine(data_final - timedelta(days=i), datetime.min.time()) for i in range((data_final - data_inicial).days + 1)]
     series = []
     for data in datas:
@@ -143,7 +140,6 @@ def calcular_probabilidade_propagacao(parametros):
     temperatura = parametros['temperatura']
     umidade = parametros['umidade']
     vento = parametros['vento']
-
     prob = (temperatura / 40) * ((100 - umidade) / 100) * (vento / 10)
     return min(max(prob, 0), 1)
 
@@ -204,7 +200,6 @@ def gerar_mapa_propagacao(grade_final, latitude, longitude, tamanho_celula):
             states.append(state)
 
     gdf = gpd.GeoDataFrame({'geometry': polygons, 'state': states}, crs='EPSG:4326')
-
     m = folium.Map(location=[latitude, longitude], zoom_start=10)
     folium.GeoJson(
         gdf,
@@ -241,7 +236,8 @@ def main():
     st.title("Simulador de Propagação de Incêndio")
     st.subheader("Automação de Parâmetros Usando APIs")
 
-    # Entrada de localização
+    meteo_series = None  # Inicializando `meteo_series` como None
+
     st.header("Seleção de Localização")
     endereco = st.text_input("Digite a localização (cidade, endereço ou coordenadas):")
 
@@ -263,7 +259,6 @@ def main():
             st.error("Coordenadas fora dos limites permitidos.")
             return
 
-        # Período de análise
         st.header("Período de Análise")
         data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=30))
         data_final = st.date_input("Data Final", datetime.now())
@@ -272,7 +267,6 @@ def main():
             st.error("A data final deve ser posterior à data inicial.")
             return
 
-        # Obter NDVI/EVI
         st.header("Dados de Vegetação")
         tipo_indice = st.selectbox("Selecione o Índice", ["ndvi", "evi"])
         if st.button("Obter NDVI/EVI"):
@@ -280,21 +274,18 @@ def main():
             if ndvi_series is not None:
                 st.line_chart(ndvi_series.set_index('Data'))
 
-        # Obter dados meteorológicos
         st.header("Dados Meteorológicos")
         if st.button("Obter Dados Meteorológicos"):
             meteo_series = obter_dados_meteorologicos(lat, lon, data_inicial, data_final)
             if meteo_series is not None:
                 st.line_chart(meteo_series.set_index('Data'))
 
-        # Parâmetros da simulação
         st.header("Parâmetros da Simulação")
         num_passos = st.slider("Número de Passos da Simulação", min_value=10, max_value=200, value=50)
         tamanho_grade = st.slider("Tamanho da Grade", min_value=10, max_value=100, value=50)
         prob_recuperacao = st.slider("Probabilidade de Recuperação da Vegetação", min_value=0.0, max_value=1.0, value=0.1)
 
         if st.button("Executar Simulação"):
-            # Configurar parâmetros com base nos dados obtidos
             parametros = {
                 'temperatura': meteo_series['Temperatura'].mean() if meteo_series is not None else 25,
                 'umidade': meteo_series['Umidade'].mean() if meteo_series is not None else 50,
@@ -302,27 +293,21 @@ def main():
                 'prob_recuperacao': prob_recuperacao
             }
 
-            # Inicializar grade
             grade_inicial = np.full((tamanho_grade, tamanho_grade), VIVO)
             centro = tamanho_grade // 2
             grade_inicial[centro, centro] = QUEIMANDO
 
-            # Executar simulação
             grades = simular_propagacao_incendio(grade_inicial, parametros, num_passos)
 
-            # Exibição dos resultados
             st.header("Resultado da Simulação")
 
-            # Mapa de propagação final
             st.subheader("Mapa de Propagação Final")
             gerar_mapa_propagacao(grades[-1], lat, lon, tamanho_celula=0.001)
 
-            # Animação (opcional)
             st.subheader("Animação da Simulação")
             animacao = criar_animacao_simulacao(grades)
             st.pyplot(animacao)
 
-            # Geração de relatório
             resultados = {
                 'Área Queimada (unidades)': np.sum(grades[-1] == QUEIMADO),
                 'Vegetação Recuperada (unidades)': np.sum(grades[-1] == RECUPERADO)
@@ -335,4 +320,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
