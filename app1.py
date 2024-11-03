@@ -117,6 +117,7 @@ def main():
         if latitude and longitude:
             st.session_state['latitude'] = latitude
             st.session_state['longitude'] = longitude
+            st.write(f"Coordenadas encontradas: {latitude}°N, {longitude}°E")  # Exibir as coordenadas
             
             # Inputs de data
             data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
