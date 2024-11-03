@@ -293,14 +293,18 @@ def plotar_simulacao(simulacao):
     num_plots = min(50, len(simulacao))
     fig, axes = plt.subplots(5, 10, figsize=(20, 10))
     axes = axes.flatten()
+
     cmap = ListedColormap(['green', 'yellow', 'orange', 'red', 'darkred', 'black'])
 
-    for i, grade in enumerate(simulacao[::max(1, len(simulacao)//num_plots)]):
+    for i, grade in enumerate(simulacao[::max(1, len(simulacao) // num_plots)]):
+        if i >= len(axes):
+            break
         ax = axes[i]
         ax.imshow(grade, cmap=cmap, interpolation='nearest')
-        ax.set_title(f'Passo {i * (len(simulacao)//num_plots)}')
+        ax.set_title(f'Passo {i * (len(simulacao) // num_plots)}')
         ax.grid(True)
 
+    # Ajustar layout para não cortar os títulos
     plt.tight_layout()
     st.pyplot(fig)
 
@@ -316,9 +320,9 @@ def main():
     data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
     data_final = st.date_input("Data Final", datetime.now())
     
-    # Sidebar para configurações da simulação
-    st.sidebar.header("Configurações da Simulação")
-    passos = st.sidebar.slider("Número de Passos", min_value=1, max_value=100, value=10, step=1)
+    # Adicionando sidebar para configurar o número de passos
+    with st.sidebar:
+        passos = st.slider("Número de Passos da Simulação", min_value=1, max_value=100, value=10)
 
     if st.button("Buscar Coordenadas"):
         latitude, longitude = obter_coordenadas_endereco(endereco)
@@ -374,28 +378,9 @@ def main():
                 # Executar a simulação
                 simulacao = executar_simulacao(tamanho, passos, inicio_fogo, params)
 
-# Plotando a simulação
-def plotar_simulacao(simulacao):
-    num_plots = min(50, len(simulacao))  # Número máximo de plots a serem exibidos
-    fig, axes = plt.subplots(5, 10, figsize=(20, 10))  # Cria uma grade de subplots
-    axes = axes.flatten()  # Achata a matriz de eixos para acesso fácil
-
-    cmap = ListedColormap(['green', 'yellow', 'orange', 'red', 'darkred', 'black'])
-
-    for i in range(num_plots):
-        grade = simulacao[i * (len(simulacao) // num_plots)]  # Seleciona grades para plotar
-        ax = axes[i]  # Acessa o eixo correspondente
-        ax.imshow(grade, cmap=cmap, interpolation='nearest')
-        ax.set_title(f'Passo {i * (len(simulacao) // num_plots)}')
-        ax.grid(True)
-
-    # Remove os eixos não utilizados se o número de plots for menor que 50
-    for j in range(num_plots, len(axes)):
-        fig.delaxes(axes[j])
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
+                # Plotar a simulação
+                st.write("### Simulação de Incêndio")
+                plotar_simulacao(simulacao)
 
                 # Resultados da simulação (exemplo, você deve adaptar conforme a lógica da sua aplicação)
                 resultados = {
@@ -413,5 +398,3 @@ def plotar_simulacao(simulacao):
 
 if __name__ == "__main__":
     main()
-
-
