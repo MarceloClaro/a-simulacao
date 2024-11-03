@@ -7,6 +7,10 @@ import requests
 import base64
 from datetime import datetime, timedelta
 
+# Chaves de API (substitua pelas suas próprias)
+EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
+EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
+
 # Configuração do cliente da API Open-Meteo com cache e retry
 cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
 retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
@@ -181,7 +185,7 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
 
     return df_ndvi, df_evi
 
-# Integrando tudo na interface do usuário
+# Interface do usuário
 def main():
     st.set_page_config(page_title="Simulador de Incêndio", page_icon="🔥")
 
