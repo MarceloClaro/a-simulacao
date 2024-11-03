@@ -58,7 +58,7 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_i
         series = pd.DataFrame({'Data': pd.to_datetime(data['listaDatas']), tipo_indice.upper(): data['listaSerie']})
         return series
     else:
-        st.error(f"Erro ao obter NDVI/EVI: {response.status_code} - Detalhes: {response.text}")
+        st.error(f"Erro ao obter NDVI/EVI: {response.status_code} - Detalhes: {response.json().get('user_message', '')}")
         return None
 
 # Função para obter dados meteorológicos usando Open-Meteo API com cache
@@ -140,7 +140,6 @@ def aplicar_regras_fogo(grade, params, ruido):
                 nova_grade[i, j] = QUEIMANDO4
             elif grade[i, j] == QUEIMANDO4:
                 nova_grade[i, j] = QUEIMADO
-                # Propaga o fogo para células adjacentes
                 vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
                 for ni, nj in vizinhos:
                     if grade[ni, nj] == VIVO and np.random.rand() < prob_propagacao * (1 + ruido / 50.0):
@@ -180,10 +179,13 @@ def main():
     endereco = st.text_input("Digite a localização (ex.: cidade, endereço):")
     
     if st.button("Buscar Coordenadas"):
-        latitude, longitude = 0, 0  # Substitua por função real para obter coordenadas
-        st.session_state['latitude'] = latitude
-        st.session_state['longitude'] = longitude
-    
+        latitude, longitude = obter_coordenadas_endereco(endereco)
+        if latitude and longitude:
+            st.session_state['latitude'] = latitude
+            st.session_state['longitude'] = longitude
+        else:
+            st.error("Endereço inválido ou fora da América do Sul.")
+
     if 'latitude' in st.session_state and 'longitude' in st.session_state:
         latitude, longitude = st.session_state['latitude'], st.session_state['longitude']
         data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
@@ -194,7 +196,7 @@ def main():
         ndvi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi')
         evi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='evi')
         
-        if not hourly_df.empty and not ndvi_df.empty and not evi_df.empty:
+        if hourly_df is not None and ndvi_df is not None and evi_df is not None:
             params = {
                 'temperatura': hourly_df['Temperatura_2m'].mean(),
                 'umidade': hourly_df['Umidade_Relativa_2m'].mean(),
