@@ -162,7 +162,7 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         })
     else:
         df_ndvi = None
-        st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message')
+        st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
             'NDVI': data_ndvi['listaSerie']
                                                                       
         })
