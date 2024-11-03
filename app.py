@@ -8,7 +8,8 @@ from sklearn.metrics import confusion_matrix
 import pandas as pd
 from fpdf import FPDF
 import base64
-
+import requests
+import base64
 
 # Definindo estados das células
 VIVO = 0
@@ -261,6 +262,33 @@ def gerar_pdf(resultados):
 
     return pdf.output(dest='S').encode('latin1')
 
+# Função para obter NDVI e EVI da Embrapa
+def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi', satelite='comb'):
+    access_token = obter_token_acesso_embrapa(EMBRAPA_CONSUMER_KEY, EMBRAPA_CONSUMER_SECRET)
+    if not access_token:
+        return None
+    url = 'https://api.cnptia.embrapa.br/satveg/v2/series'
+    headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
+    payload = {
+        "tipoPerfil": tipo_indice,
+        "satelite": satelite,
+        "latitude": latitude,
+        "longitude": longitude,
+        "dataInicial": data_inicial.strftime('%Y-%m-%d'),  # Formato de data
+        "dataFinal": data_final.strftime('%Y-%m-%d')
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        data = response.json()
+        series = pd.DataFrame({
+            'Data': pd.to_datetime(data['listaDatas']),
+            tipo_indice.upper(): data['listaSerie']
+        })
+        return series
+    else:
+        st.error(f"Erro ao obter NDVI/EVI: {response.status_code} - Detalhes: {response.json().get('user_message', '')}")
+        return None
+
 # Interface principal do Streamlit
 def main():
     st.set_page_config(page_title="EcoSim.ai - Simulador de Propagação de Incêndio", page_icon="🔥")
@@ -270,27 +298,12 @@ def main():
 
     st.sidebar.image("logo.png", width=200)
     with st.sidebar.expander("Como encontra o NDVI e EVI para Simulação"):
-        st.markdown("""
-        Para obter os índices NDVI e EVI da sua região e ajudar na simulação de propagação do fogo, você pode utilizar o **SATVeg - Sistema de Análise Temporal da Vegetação**. Esta ferramenta permite acessar índices vegetativos NDVI e EVI do sensor MODIS em qualquer local da América do Sul.
-        
+        st.markdown("""Para obter os índices NDVI e EVI da sua região e ajudar na simulação de propagação do fogo, você pode utilizar o **SATVeg - Sistema de Análise Temporal da Vegetação**. Esta ferramenta permite acessar índices vegetativos NDVI e EVI do sensor MODIS em qualquer local da América do Sul.
         Para acessar os dados, visite o site do SATVeg:
-        
-        [SATVeg](https://www.satveg.cnptia.embrapa.br/satveg/login.html)
-        
-        Fontes:
-        
-        (1) SATVeg - Embrapa. https://www.satveg.cnptia.embrapa.br/satveg/login.html.
-        
-        (2) SATVeg - Embrapa. https://www.satveg.cnptia.embrapa.br/satveg/pages/tutoriais.html.
-        
-        (3) Sistema de Análise Temporal da Vegetação - SATVeg. https://www.embrapa.br/busca-de-solucoes-tecnologicas/-/produto-servico/2408/sistema-de-analise-temporal-da-vegetacao---satveg.
-       
-        (4) API Store - SATVeg. https://www.agroapi.cnptia.embrapa.br/store/apis/info?name=SATVeg&version=v2&provider=agroapi.    
-        """)
+        [SATVeg](https://www.satveg.cnptia.embrapa.br/satveg/login.html)""")
 
     with st.sidebar.expander("Manual de Uso"):
-        st.markdown("""
-        ### Manual de Uso
+        st.markdown("""### Manual de Uso
         Este simulador permite modelar a propagação do fogo em diferentes condições ambientais. Para utilizar:
         1. Ajuste os parâmetros de simulação usando os controles deslizantes.
         2. Clique em "Executar Simulação" para iniciar a simulação.
@@ -298,107 +311,7 @@ def main():
         """)
 
     with st.sidebar.expander("Explicação do Processo Matemático"):
-        st.markdown("""
-Olá, sou o Professor Marcelo Claro, especializado em Geografia e Educação Ambiental. Também sou entusiasta em Inteligência Artificial (IA) e Ciências de Dados. Através deste projeto, busco estimular a curiosidade e a iniciação científica entre alunos do ensino básico, promovendo uma abordagem interdisciplinar que desenvolve proficiência digital e inovação. Utilizo diversas técnicas didáticas, como analogias pertinentes, para tornar temas complexos acessíveis e despertar o interesse autodidata nos alunos.
-
-### Explicação do Processo Matemático
-
-#### Autômatos Celulares
-
-Nosso simulador utiliza autômatos celulares para modelar a propagação do fogo. Cada célula do grid representa um pedaço de terreno que pode estar em diferentes estados:
-
-- **Intacto**: Vegetação não queimada.
-- **Queimando1 a Queimando4**: Diferentes estágios de queima.
-- **Queimado**: Vegetação queimada.
-
-A probabilidade de uma célula pegar fogo depende de fatores como temperatura, umidade, velocidade e direção do vento, densidade da vegetação e o índice de vegetação por diferença normalizada (NDVI). O efeito do vento é modelado com vetores direcionais, e a propagação do fogo é calculada a cada passo da simulação. O parâmetro de ruído adiciona aleatoriedade à propagação do fogo, representando incertezas no ambiente.
-
-#### Equação da Regra do Autômato Celular
-
-A probabilidade de uma célula (i, j) pegar fogo é dada por:
-
-\[ P_{\text{spread}}(i, j) = P_{\text{base}} \times W_{\text{effect}}(i, j) \times N_{\text{effect}} \]
-
-Onde:
-- \( P_{\text{spread}}(i, j) \) é a probabilidade de propagação do fogo para a célula (i, j).
-- \( P_{\text{base}} \) é a probabilidade base de uma célula pegar fogo, dependente do estado da célula e de outros fatores.
-- \( W_{\text{effect}}(i, j) \) é o efeito do vento na propagação do fogo para a célula (i, j).
-- \( N_{\text{effect}} \) é o efeito do ruído na propagação do fogo.
-
-### Elementos da Equação
-
-**P_{\text{base}}** é determinada por fatores ambientais:
-
-- **Temperatura (°C)**: Maior temperatura, maior a probabilidade de propagação do fogo.
-- **Umidade relativa (%)**: Menor umidade, maior a probabilidade de propagação do fogo.
-- **Densidade Vegetal (%)**: Maior densidade da vegetação, maior a probabilidade de propagação do fogo.
-- **Teor de umidade do combustível (%)**: Menor umidade do combustível, maior a probabilidade de propagação do fogo.
-- **Tipo de vegetação**: Diferentes tipos de vegetação têm diferentes probabilidades base de pegar fogo.
-- **Topografia (inclinação em graus)**: Áreas com maior inclinação podem ter maior probabilidade de propagação do fogo.
-- **Tipo de solo**: Diferentes tipos de solo influenciam a probabilidade de propagação do fogo.
-- **NDVI (Índice de Vegetação por Diferença Normalizada)**: O NDVI indica a quantidade de vegetação verde e ativa. Valores mais altos de NDVI indicam vegetação mais densa e saudável, influenciando a propagação do fogo.
-
-### Estatísticas e Interpretações
-
-A simulação permite observar a propagação do fogo em diferentes condições ambientais. Os resultados ajudam a entender o comportamento do fogo e planejar estratégias de manejo e controle de incêndios.
-
-#### Análises Estatísticas
-
-##### Histogramas
-
-Um histograma é um gráfico de barras que mostra a frequência de um evento. No simulador, ele visualiza quantas células estão queimando em cada etapa da simulação. Por exemplo, se temos 10 células queimando no primeiro dia, 15 no segundo, o histograma mostrará essas contagens como barras, permitindo ver como o fogo se espalha ao longo do tempo.
-
-##### Gráficos de Margem de Erro
-
-Um gráfico de margem de erro mostra a média de um conjunto de dados e a variação ao redor dessa média. A média seria o número médio de células queimando a cada dia. A margem de erro indica o quanto esses números podem variar em torno da média. Pequena margem de erro significa números próximos da média; grande margem de erro indica variação significativa.
-
-##### Correlação de Spearman
-
-Correlação de Spearman mede a relação entre duas variáveis sem assumir que a relação seja linear. No simulador, pode-se usar para ver a relação entre temperatura e velocidade do fogo. Alta correlação significa que quando uma variável aumenta, a outra também tende a aumentar (ou diminuir).
-
-##### ANOVA
-
-ANOVA, ou Análise de Variância, é um teste estatístico que compara médias de diferentes grupos para ver se há diferenças significativas entre eles. No simulador, ANOVA pode comparar a propagação do fogo em diferentes tipos de vegetação. Resultados significativos (p-valor muito pequeno, como 2,68e-07) indicam variação significativa entre os tipos de vegetação.
-
-Resultado da ANOVA:
-- **F-valor**: 17,73 - Este valor indica a razão entre a variância média entre os grupos e a variância média dentro dos grupos. Um F-valor alto sugere que as diferenças entre os grupos são maiores que as variações dentro dos grupos, indicando que as condições (como tipo de vegetação) têm um impacto significativo na propagação do fogo.
-- **p-valor**: 2,68e-07 - Este valor representa a probabilidade de que as diferenças observadas tenham ocorrido por acaso. Um p-valor muito pequeno (geralmente menor que 0,05) indica que as diferenças são estatisticamente significativas, confirmando que fatores como tipo de vegetação realmente influenciam a propagação do fogo.
-
-##### Q-Exponential
-
-A distribuição Q-Exponencial modela dados que não seguem uma distribuição normal, útil para fenômenos complexos como a propagação do fogo. Valores Q-Exponencial para o número de células queimando podem mostrar distribuição assimétrica, indicando dias em que o fogo se espalha muito mais rápido.
-
-**Exemplo de valores Q-Exponencial para células queimando**:
-
-Os valores mostram que, em alguns passos, a probabilidade de propagação do fogo é menor (0,44), enquanto em outros é total (1,0), indicando uma variabilidade significativa na propagação do fogo.
-
-##### Estatística Q
-
-A Estatística Q mede a relação entre variáveis em um contexto com dependência ou não linearidade. No simulador, ajuda a entender como diferentes fatores (temperatura, umidade, velocidade do vento) influenciam a propagação do fogo, explorando a complexidade dos dados.
-
-**Exemplo de valores de Estatística Q para células queimando**:
-
-Esses valores destacam a variabilidade na propagação do fogo, mostrando a complexidade e a influência de múltiplos fatores no processo.
-
-##### Matriz de Confusão
-
-Uma matriz de confusão avalia a performance de um modelo de classificação. No simulador, mostra quantas vezes o modelo previu corretamente (ou incorretamente) o estado de uma célula. Por exemplo, se 243.191 células foram corretamente identificadas como intactas e 126 em cada estágio de queima, mas algumas previsões foram incorretas, isso ajuda a entender se o modelo está funcionando bem ou precisa de ajustes.
-
-**Exemplo de Matriz de Confusão**:
-
-- 243.191 células foram corretamente identificadas como intactas.
-- 126 células foram corretamente identificadas em cada estágio de queima.
-- Alguns erros de previsão (129 células foram incorretamente identificadas como queimando quando não estavam).
-
-Essas análises são importantes para entender melhor a propagação do fogo e melhorar a precisão do simulador.
-
-Espero que esta explicação tenha ajudado a entender os processos e análises estatísticas que utilizamos em nosso simulador. Se tiverem dúvidas ou quiserem discutir mais sobre o tema, estou à disposição para ajudar. Vamos continuar explorando juntos o fascinante mundo da ciência de dados e da IA aplicada à educação ambiental!
-
----
-Para mais detalhes, siga-me no Instagram: [Marcelo Claro](https://www.instagram.com/marceloclaro.geomaker/)
-""")
-
-
+        st.markdown("""Olá, sou o Professor Marcelo Claro, especializado em Geografia e Educação Ambiental. Também sou entusiasta em Inteligência Artificial (IA) e Ciências de Dados. Através deste projeto, busco estimular a curiosidade e a iniciação científica entre alunos do ensino básico, promovendo uma abordagem interdisciplinar que desenvolve proficiência digital e inovação. Utilizo diversas técnicas didáticas, como analogias pertinentes, para tornar temas complexos acessíveis e despertar o interesse autodidata nos alunos.""")
 
     params = {
         'temperatura': st.sidebar.slider('Temperatura (°C)', 0, 50, 30),
@@ -450,16 +363,11 @@ Para mais detalhes, siga-me no Instagram: [Marcelo Claro](https://www.instagram.
     num_passos = st.sidebar.slider('Número de passos', 10, 200, 100)
 
     st.sidebar.image("eu.ico", width=80)
-    st.sidebar.write("""
-    Projeto Geomaker + IA 
+    st.sidebar.write("""Projeto Geomaker + IA 
     - Professor: Marcelo Claro.
-
     Contatos: marceloclaro@gmail.com
-
     Whatsapp: (88)981587145
-
-    Instagram: [https://www.instagram.com/marceloclaro.geomaker/](https://www.instagram.com/marceloclaro.geomaker/)
-    """)
+    Instagram: [https://www.instagram.com/marceloclaro.geomaker/](https://www.instagram.com/marceloclaro.geomaker/)""")
 
     # Controle de Áudio
     st.sidebar.title("Controle de Áudio")
