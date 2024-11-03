@@ -13,6 +13,7 @@ from fpdf import FPDF
 import urllib.parse
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import io
 
 # Configurações iniciais do Streamlit
 st.set_page_config(
@@ -170,7 +171,7 @@ def simular_propagacao_incendio(grade_inicial, parametros, num_passos):
 
 def criar_animacao_simulacao(grades):
     fig, ax = plt.subplots()
-    cmap = plt.cm.get_cmap('brg', 4)
+    cmap = plt.colormaps.get_cmap('brg', 4)  # Ajuste da função get_cmap
     im = ax.imshow(grades[0], cmap=cmap, vmin=VIVO, vmax=RECUPERADO)
     plt.colorbar(im, ticks=range(4), label='Estado')
 
@@ -179,7 +180,12 @@ def criar_animacao_simulacao(grades):
         return [im]
 
     ani = animation.FuncAnimation(fig, update, frames=len(grades), interval=200, blit=True)
-    return ani
+
+    # Salvar animação em GIF
+    buf = io.BytesIO()
+    ani.save(buf, format="gif")
+    buf.seek(0)
+    return buf
 
 def gerar_mapa_propagacao(grade_final, latitude, longitude, tamanho_celula):
     tamanho_grade = grade_final.shape[0]
@@ -306,7 +312,7 @@ def main():
 
             st.subheader("Animação da Simulação")
             animacao = criar_animacao_simulacao(grades)
-            st.pyplot(animacao)
+            st.image(animacao, format="gif")
 
             resultados = {
                 'Área Queimada (unidades)': np.sum(grades[-1] == QUEIMADO),
