@@ -180,7 +180,13 @@ def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido, direcao_vent
 
 # Função para exibir gráficos de histogramas e margem de erro
 def plotar_histogramas_e_margem_erro(simulacao):
-    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
+    contagem_queimando = [
+        np.sum(grade == QUEIMANDO1) + 
+        np.sum(grade == QUEIMANDO2) + 
+        np.sum(grade == QUEIMANDO3) + 
+        np.sum(grade == QUEIMANDO4) 
+        for grade in simulacao
+    ]
 
     st.sidebar.write("### Histograma de Células Queimando")
     fig, ax = plt.subplots()
@@ -231,11 +237,11 @@ def plotar_simulacao(grades, direcao_vento):
 def plotar_correlacao(params):
     # Convertendo os parâmetros em um DataFrame
     df_params = pd.DataFrame([params])
-
-    # Verificando se há valores NaN
+    
+    # Verificando se todos os dados são válidos e não possuem NaN
     if df_params.isnull().values.any():
-        st.warning("Existem valores NaN nos parâmetros. Corrigindo...")
-        df_params.fillna(0, inplace=True)  # Substitui NaN por 0, ou use df_params.fillna(df_params.mean(), inplace=True)
+        st.warning("Os dados contêm valores ausentes, a matriz de correlação pode não ser representativa.")
+        return
 
     # Calculando a matriz de correlação
     correlacao = df_params.corr()
@@ -246,7 +252,6 @@ def plotar_correlacao(params):
     plt.title("Matriz de Correlação entre Parâmetros")
     plt.tight_layout()
     st.pyplot(plt)
-
 
 # Interface do usuário
 def main():
@@ -312,3 +317,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
