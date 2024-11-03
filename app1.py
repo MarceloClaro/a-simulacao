@@ -132,10 +132,10 @@ def calcular_probabilidade_propagacao(params, direcao_vento):
         "evi": params['evi'],
         "chuva": (50 - params['chuva']) / 50,
         "nuvens": (100 - params['nuvens']) / 100,
-        "direcao_vento": direcao_vento / 360
+        "direcao_vento": (direcao_vento / 360)  # Normalizando a direção do vento
     }
     prob_base = 0.3
-    prob = prob_base + 0.1 * sum(fatores.values())
+    prob = prob_base + 0.1 * (fatores["temp"] + fatores["umidade"] + fatores["vento_10m"] + fatores["vento_100m"] + fatores["ndvi"] + fatores["evi"] + fatores["chuva"] + fatores["nuvens"])
     return min(max(prob, 0), 1)
 
 # Função para aplicar regras de propagação do fogo
@@ -156,8 +156,11 @@ def aplicar_regras_fogo(grade, params, ruido, direcao_vento):
                 nova_grade[i, j] = QUEIMADO
                 vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
                 for ni, nj in vizinhos:
-                    if grade[ni, nj] == VIVO and np.random.rand() < prob_propagacao * (1 + ruido / 50.0):
-                        nova_grade[ni, nj] = QUEIMANDO1
+                    # Implementando a influência da direção do vento
+                    if grade[ni, nj] == VIVO:
+                        prob_ajustada = prob_propagacao * (1 + np.cos(np.radians(direcao_vento - 90)) / 2)  # Ajusta a probabilidade conforme a direção do vento
+                        if np.random.rand() < prob_ajustada * (1 + ruido / 50.0):
+                            nova_grade[ni, nj] = QUEIMANDO1
     return nova_grade
 
 # Função para executar a simulação
