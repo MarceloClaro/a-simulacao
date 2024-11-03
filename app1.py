@@ -122,6 +122,18 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
     
     return hourly_df, daily_df
 
+# Função para obter coordenadas de uma localidade usando Nominatim
+def obter_coordenadas_endereco(endereco):
+    url = f"https://nominatim.openstreetmap.org/search?q={requests.utils.quote(endereco)}&format=json&limit=1"
+    headers = {'User-Agent': 'SimuladorIncendio/1.0'}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200 and response.json():
+        resultado = response.json()[0]
+        return float(resultado['lat']), float(resultado['lon'])
+    else:
+        st.error("Endereço não encontrado.")
+        return None, None
+
 # Interface do usuário
 def main():
     st.title("Simulador de Propagação de Incêndio")
@@ -129,19 +141,34 @@ def main():
 
     # Seleção de localização e período
     st.header("Seleção de Localização e Período de Análise")
-    latitude = st.number_input("Latitude", value=-5.1783)
-    longitude = st.number_input("Longitude", value=-40.6775)
-    data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=14))
-    data_final = st.date_input("Data Final", datetime.now())
+    endereco = st.text_input("Digite a localização (ex.: cidade, endereço):")
+    
+    if st.button("Buscar Coordenadas"):
+        if endereco:
+            latitude, longitude = obter_coordenadas_endereco(endereco)
+            if latitude and longitude:
+                st.success(f"Coordenadas encontradas: Latitude {latitude}, Longitude {longitude}")
+                st.session_state['latitude'] = latitude
+                st.session_state['longitude'] = longitude
+        else:
+            st.error("Por favor, insira uma localização válida.")
+    
+    # Utilização de coordenadas armazenadas
+    if 'latitude' in st.session_state and 'longitude' in st.session_state:
+        latitude = st.session_state['latitude']
+        longitude = st.session_state['longitude']
 
-    if st.button("Obter Dados Meteorológicos"):
-        hourly_df, daily_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
-        
-        st.write("### Dados Meteorológicos Horários")
-        st.write(hourly_df)
-        
-        st.write("### Dados Meteorológicos Diários")
-        st.write(daily_df)
+        data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=14))
+        data_final = st.date_input("Data Final", datetime.now())
+
+        if st.button("Obter Dados Meteorológicos"):
+            hourly_df, daily_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
+            
+            st.write("### Dados Meteorológicos Horários")
+            st.write(hourly_df)
+            
+            st.write("### Dados Meteorológicos Diários")
+            st.write(daily_df)
 
 if __name__ == '__main__':
     main()
