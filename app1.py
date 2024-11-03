@@ -374,9 +374,28 @@ def main():
                 # Executar a simulação
                 simulacao = executar_simulacao(tamanho, passos, inicio_fogo, params)
 
-                # Plotar a simulação
-                st.write("### Simulação de Incêndio")
-                plotar_simulacao(simulacao)
+# Plotando a simulação
+def plotar_simulacao(simulacao):
+    num_plots = min(50, len(simulacao))  # Número máximo de plots a serem exibidos
+    fig, axes = plt.subplots(5, 10, figsize=(20, 10))  # Cria uma grade de subplots
+    axes = axes.flatten()  # Achata a matriz de eixos para acesso fácil
+
+    cmap = ListedColormap(['green', 'yellow', 'orange', 'red', 'darkred', 'black'])
+
+    for i in range(num_plots):
+        grade = simulacao[i * (len(simulacao) // num_plots)]  # Seleciona grades para plotar
+        ax = axes[i]  # Acessa o eixo correspondente
+        ax.imshow(grade, cmap=cmap, interpolation='nearest')
+        ax.set_title(f'Passo {i * (len(simulacao) // num_plots)}')
+        ax.grid(True)
+
+    # Remove os eixos não utilizados se o número de plots for menor que 50
+    for j in range(num_plots, len(axes)):
+        fig.delaxes(axes[j])
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
 
                 # Resultados da simulação (exemplo, você deve adaptar conforme a lógica da sua aplicação)
                 resultados = {
