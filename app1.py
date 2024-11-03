@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 import base64
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+from PIL import Image, ImageDraw
+import io
 
 # Configurações iniciais do Streamlit
 st.set_page_config(
@@ -26,37 +28,21 @@ cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
 retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
 openmeteo = openmeteo_requests.Client(session=retry_session)
 
-# Função para obter token de acesso da Embrapa
+# Funções de obtenção de dados e API
 def obter_token_acesso_embrapa(consumer_key, consumer_secret):
     token_url = 'https://api.cnptia.embrapa.br/token'
     credentials = f"{consumer_key}:{consumer_secret}"
     encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+    headers = {'Authorization': f'Basic {encoded_credentials}', 'Content-Type': 'application/x-www-form-urlencoded'}
+    response = requests.post(token_url, headers=headers, data={'grant_type': 'client_credentials'})
+    return response.json().get('access_token') if response.status_code == 200 else None
 
-    headers = {
-        'Authorization': f'Basic {encoded_credentials}',
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-    data = {'grant_type': 'client_credentials'}
-    response = requests.post(token_url, headers=headers, data=data)
-
-    if response.status_code == 200:
-        token_info = response.json()
-        return token_info['access_token']
-    else:
-        st.error(f"Erro ao obter token da Embrapa: {response.status_code}")
-        return None
-
-# Função para obter NDVI e EVI da Embrapa
 def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi', satelite='comb'):
     access_token = obter_token_acesso_embrapa(EMBRAPA_CONSUMER_KEY, EMBRAPA_CONSUMER_SECRET)
     if not access_token:
         return None
-
     url = 'https://api.cnptia.embrapa.br/satveg/v2/series'
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json'
-    }
+    headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
     payload = {
         "tipoPerfil": tipo_indice,
         "satelite": satelite,
@@ -66,18 +52,8 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_i
         "dataFinal": data_final.strftime('%Y-%m-%d')
     }
     response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 200:
-        data = response.json()
-        series = pd.DataFrame({
-            'Data': pd.to_datetime(data['listaDatas']),
-            tipo_indice.upper(): data['listaSerie']
-        })
-        return series
-    else:
-        st.error(f"Erro ao obter NDVI/EVI: {response.status_code}")
-        return None
+    return pd.DataFrame({'Data': pd.to_datetime(response.json()['listaDatas']), tipo_indice.upper(): response.json()['listaSerie']})
 
-# Função para obter dados meteorológicos usando Open-Meteo API com cache
 def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
@@ -87,10 +63,8 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
         "end_date": data_final.strftime('%Y-%m-%d'),
         "hourly": ["temperature_2m", "relative_humidity_2m", "wind_speed_10m", "wind_direction_10m"],
     }
-    
     responses = openmeteo.weather_api(url, params=params)
     response = responses[0]
-
     hourly = response.Hourly()
     hourly_data = {
         "Data": pd.date_range(
@@ -104,36 +78,28 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
         "Velocidade_Vento_10m": hourly.Variables(2).ValuesAsNumpy(),
         "Direcao_Vento_10m": hourly.Variables(3).ValuesAsNumpy(),
     }
-    hourly_df = pd.DataFrame(hourly_data)
-    
-    return hourly_df
+    return pd.DataFrame(hourly_data)
 
-# Função para obter coordenadas de uma localidade usando Nominatim
 def obter_coordenadas_endereco(endereco):
     url = f"https://nominatim.openstreetmap.org/search?q={requests.utils.quote(endereco)}&format=json&limit=1"
-    headers = {'User-Agent': 'SimuladorIncendio/1.0'}
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers={'User-Agent': 'SimuladorIncendio/1.0'})
     if response.status_code == 200 and response.json():
         resultado = response.json()[0]
         return float(resultado['lat']), float(resultado['lon'])
-    else:
-        st.error("Endereço não encontrado.")
-        return None, None
+    st.error("Endereço não encontrado.")
+    return None, None
 
-# Função para simulação de propagação de incêndio usando autômatos celulares
-VIVO = 0
-QUEIMANDO = 1
-QUEIMADO = 2
+# Funções de simulação de incêndio
+VIVO, QUEIMANDO, QUEIMADO = 0, 1, 2
 
 def inicializar_grade(tamanho, inicio_fogo):
     grade = np.full((tamanho, tamanho), VIVO)
     grade[inicio_fogo] = QUEIMANDO
     return grade
 
-def aplicar_regras_fogo(grade, prob_propagacao, direcao_vento):
+def aplicar_regras_fogo(grade, prob_propagacao):
     nova_grade = grade.copy()
     tamanho = grade.shape[0]
-
     for i in range(1, tamanho - 1):
         for j in range(1, tamanho - 1):
             if grade[i, j] == QUEIMANDO:
@@ -144,24 +110,30 @@ def aplicar_regras_fogo(grade, prob_propagacao, direcao_vento):
                         nova_grade[ni, nj] = QUEIMANDO
     return nova_grade
 
-def executar_simulacao(tamanho, passos, inicio_fogo, prob_propagacao, direcao_vento):
+def executar_simulacao(tamanho, passos, inicio_fogo, prob_propagacao):
     grade = inicializar_grade(tamanho, inicio_fogo)
     grades = [grade.copy()]
-
     for _ in range(passos):
-        grade = aplicar_regras_fogo(grade, prob_propagacao, direcao_vento)
+        grade = aplicar_regras_fogo(grade, prob_propagacao)
         grades.append(grade.copy())
-
     return grades
 
-def plotar_simulacao(grades):
-    fig, ax = plt.subplots(figsize=(6, 6))
+def criar_animacao_gif(grades):
+    frames = []
     cmap = ListedColormap(['green', 'red', 'black'])
-
     for grade in grades:
+        fig, ax = plt.subplots(figsize=(5, 5))
         ax.imshow(grade, cmap=cmap, interpolation='nearest')
-        plt.pause(0.1)
-    st.pyplot(fig)
+        ax.axis('off')
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        frames.append(Image.open(buf))
+        plt.close(fig)
+    buf = io.BytesIO()
+    frames[0].save(buf, format='GIF', append_images=frames[1:], save_all=True, duration=300, loop=0)
+    buf.seek(0)
+    return buf
 
 # Interface do usuário
 def main():
@@ -172,14 +144,11 @@ def main():
     endereco = st.text_input("Digite a localização (ex.: cidade, endereço):")
     
     if st.button("Buscar Coordenadas"):
-        if endereco:
-            latitude, longitude = obter_coordenadas_endereco(endereco)
-            if latitude and longitude:
-                st.success(f"Coordenadas encontradas: Latitude {latitude}, Longitude {longitude}")
-                st.session_state['latitude'] = latitude
-                st.session_state['longitude'] = longitude
-        else:
-            st.error("Por favor, insira uma localização válida.")
+        latitude, longitude = obter_coordenadas_endereco(endereco) if endereco else (None, None)
+        if latitude and longitude:
+            st.success(f"Coordenadas encontradas: Latitude {latitude}, Longitude {longitude}")
+            st.session_state['latitude'] = latitude
+            st.session_state['longitude'] = longitude
     
     if 'latitude' in st.session_state and 'longitude' in st.session_state:
         latitude = st.session_state['latitude']
@@ -198,17 +167,16 @@ def main():
             st.write(ndvi_df)
 
             if not hourly_df.empty and not ndvi_df.empty:
-                prob_propagacao = hourly_df['Temperatura_2m'].mean() * 0.01  # Exemplo de cálculo com temperatura
-                direcao_vento = hourly_df['Direcao_Vento_10m'].mode()[0]
-
+                prob_propagacao = hourly_df['Temperatura_2m'].mean() * 0.01
                 st.subheader("Configurações da Simulação")
                 tamanho_grade = st.slider("Tamanho da Grade", 10, 100, 50)
                 passos = st.slider("Número de Passos da Simulação", 10, 200, 100)
                 inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
 
                 if st.button("Executar Simulação de Incêndio"):
-                    simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, prob_propagacao, direcao_vento)
-                    plotar_simulacao(simulacao)
+                    simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, prob_propagacao)
+                    gif_animacao = criar_animacao_gif(simulacao)
+                    st.image(gif_animacao, format="gif")
 
 if __name__ == '__main__':
     main()
