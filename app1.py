@@ -1,108 +1,100 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from matplotlib.colors import ListedColormap
 import pandas as pd
-from fpdf import FPDF
 import base64
 import requests
-import json
 from datetime import datetime, timedelta
-import io
 
-# Definir chaves de API para a Embrapa e OpenWeather
-EMBRAPA_CONSUMER_KEY = 'SUA_CONSUMER_KEY_AQUI'
-EMBRAPA_CONSUMER_SECRET = 'SEU_CONSUMER_SECRET_AQUI'
-API_KEY_OPENWEATHERMAP = 'SUA_API_KEY_OPENWEATHERMAP_AQUI'
+# Definindo as chaves de API (substitua pelas suas próprias)
+API_KEY_OPENWEATHERMAP = '5af75d4ed5ae582e673f8d0ba4728936'
+EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
+EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
 
-# Função para buscar dados NDVI e EVI da API SATVeg da Embrapa
-def obter_dados_ndvi(latitude, longitude, data_inicial, data_final):
-    url = "https://api.cnptia.embrapa.br/satveg/v2/series"
-    token_url = "https://api.cnptia.embrapa.br/token"
-    credentials = f"{EMBRAPA_CONSUMER_KEY}:{EMBRAPA_CONSUMER_SECRET}"
+# Função para obter coordenadas (latitude e longitude) a partir de um endereço ou nome de cidade
+def obter_coordenadas_endereco(endereco):
+    url = f"https://nominatim.openstreetmap.org/search?q={endereco}&format=json&limit=1"
+    response = requests.get(url)
+    if response.status_code == 200 and response.json():
+        resultado = response.json()[0]
+        return float(resultado['lat']), float(resultado['lon'])
+    else:
+        st.error("Endereço não encontrado.")
+        return None, None
+
+# Função para obter o token de acesso da Embrapa
+def obter_token_acesso_embrapa(consumer_key, consumer_secret):
+    token_url = 'https://api.cnptia.embrapa.br/token'
+    credentials = f"{consumer_key}:{consumer_secret}"
+    encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+
     headers = {
-        "Authorization": "Basic " + base64.b64encode(credentials.encode()).decode(),
-        "Content-Type": "application/x-www-form-urlencoded"
+        'Authorization': f'Basic {encoded_credentials}',
+        'Content-Type': 'application/x-www-form-urlencoded'
     }
-    data = {"grant_type": "client_credentials"}
+
+    data = {'grant_type': 'client_credentials'}
     response = requests.post(token_url, headers=headers, data=data)
 
     if response.status_code == 200:
-        access_token = response.json().get("access_token")
-        headers = {"Authorization": "Bearer " + access_token}
-        payload = {
-            "tipoPerfil": "ndvi",
-            "satelite": "comb",
-            "latitude": latitude,
-            "longitude": longitude,
-            "dataInicial": data_inicial.strftime('%Y-%m-%d'),
-            "dataFinal": data_final.strftime('%Y-%m-%d')
-        }
-        response = requests.post(url, headers=headers, json=payload)
-        if response.status_code == 200:
-            data = response.json()
-            return data["listaSerie"]
-    return None
-
-# Função para buscar dados meteorológicos da API OpenWeather
-def obter_dados_meteorologicos(latitude, longitude):
-    url = f"http://api.openweathermap.org/data/2.5/onecall?lat={latitude}&lon={longitude}&appid={API_KEY_OPENWEATHERMAP}&units=metric"
-    response = requests.get(url)
-    if response.status_code == 200:
-        dados = response.json()
-        temperatura = dados["current"]["temp"]
-        umidade = dados["current"]["humidity"]
-        velocidade_vento = dados["current"]["wind_speed"]
-        return temperatura, umidade, velocidade_vento
+        token_info = response.json()
+        return token_info['access_token']
     else:
-        return None, None, None
+        st.error(f"Erro ao obter token da Embrapa: {response.status_code}")
+        return None
+
+# Função para obter dados NDVI e EVI da Embrapa usando latitude e longitude
+def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi', satelite='comb'):
+    access_token = obter_token_acesso_embrapa(EMBRAPA_CONSUMER_KEY, EMBRAPA_CONSUMER_SECRET)
+    if not access_token:
+        return None
+
+    url = 'https://api.cnptia.embrapa.br/satveg/v2/series'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+    payload = {
+        "tipoPerfil": tipo_indice,
+        "satelite": satelite,
+        "latitude": latitude,
+        "longitude": longitude,
+        "dataInicial": data_inicial.strftime('%Y-%m-%d'),
+        "dataFinal": data_final.strftime('%Y-%m-%d')
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        data = response.json()
+        series = pd.DataFrame({
+            'Data': pd.to_datetime(data['listaDatas']),
+            tipo_indice.upper(): data['listaSerie']
+        })
+        return series
+    else:
+        st.error(f"Erro ao obter NDVI/EVI: {response.status_code}")
+        return None
 
 # Interface principal do Streamlit
 def main():
-    st.title("EcoSim.ai - Simulador de Propagação de Incêndio")
-    st.sidebar.subheader("Configurações de Simulação")
-    latitude = st.sidebar.number_input("Latitude", -90.0, 90.0, 0.0)
-    longitude = st.sidebar.number_input("Longitude", -180.0, 180.0, 0.0)
-    data_inicial = st.sidebar.date_input("Data Inicial", datetime.now() - timedelta(days=30))
-    data_final = st.sidebar.date_input("Data Final", datetime.now())
+    st.title("Simulador de Propagação de Incêndio com Dados NDVI e Meteorológicos")
+    endereco = st.text_input("Digite a localização (cidade, endereço ou coordenadas):")
 
-    # Buscar NDVI e dados meteorológicos
-    if st.sidebar.button("Buscar NDVI e Meteorologia"):
-        ndvi = obter_dados_ndvi(latitude, longitude, data_inicial, data_final)
-        temperatura, umidade, velocidade_vento = obter_dados_meteorologicos(latitude, longitude)
-        if ndvi:
-            st.sidebar.write(f"NDVI Obtido: {ndvi[-1]}")
-        if temperatura and umidade and velocidade_vento:
-            st.sidebar.write(f"Temperatura: {temperatura} °C")
-            st.sidebar.write(f"Umidade: {umidade} %")
-            st.sidebar.write(f"Velocidade do Vento: {velocidade_vento} m/s")
+    if st.button("Obter Coordenadas"):
+        if endereco:
+            latitude, longitude = obter_coordenadas_endereco(endereco)
+            if latitude and longitude:
+                st.write(f"Coordenadas: Latitude {latitude}, Longitude {longitude}")
 
-    params = {
-        'temperatura': st.sidebar.slider('Temperatura (°C)', 0, 50, 30),
-        'umidade': st.sidebar.slider('Umidade relativa (%)', 0, 100, 40),
-        'velocidade_vento': st.sidebar.slider('Velocidade do Vento (km/h)', 0, 100, 20),
-        'direcao_vento': st.sidebar.slider('Direção do Vento (graus)', 0, 360, 90),
-        'precipitacao': st.sidebar.slider('Precipitação (mm/dia)', 0, 200, 0),
-        'radiacao_solar': st.sidebar.slider('Radiação Solar (W/m²)', 0, 1200, 800),
-        'tipo_vegetacao': st.sidebar.selectbox('Tipo de vegetação', ['pastagem', 'matagal', 'floresta decídua', 'floresta tropical']),
-        'densidade_vegetacao': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
-        'umidade_combustivel': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
-        'topografia': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
-        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'misto', 'argiloso']),
-        'ndvi': st.sidebar.slider('NDVI (Índice de Vegetação por Diferença Normalizada)', 0.0, 1.0, 0.6),
-        'intensidade_fogo': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
-        'tempo_desde_ultimo_fogo': st.sidebar.slider('Tempo desde o último incêndio (anos)', 0, 100, 10),
-        'intervencao_humana': st.sidebar.slider('Fator de Intervenção Humana (escala 0-1)', 0.0, 1.0, 0.2),
-        'ruido': st.sidebar.slider('Ruído (%)', 1, 100, 10)
-    }
+    # Configuração das datas para a coleta de dados NDVI/EVI
+    data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=30))
+    data_final = st.date_input("Data Final", datetime.now())
 
-    if st.button("Executar Simulação"):
-        # Código de simulação e geração de gráficos
-        # Funções de simulação e processamento a serem chamadas
-        st.write("Simulação executada. Visualize os resultados abaixo.")
-
-    # Funções e exibição de resultados adicionais podem ser adicionadas aqui, como gráficos e tabelas.
+    # Buscar NDVI e EVI
+    if latitude and longitude:
+        tipo_indice = st.selectbox("Selecione o Índice Vegetativo", ["ndvi", "evi"])
+        if st.button("Obter NDVI/EVI"):
+            ndvi_evi_series = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice=tipo_indice)
+            if ndvi_evi_series is not None:
+                st.line_chart(ndvi_evi_series.set_index('Data'))
 
 if __name__ == "__main__":
     main()
