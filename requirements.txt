@@ -11,3 +11,6 @@ folium
 streamlit_folium
 geopandas
 rasterio
+openmeteo-requests
+requests-cache 
+retry-requests
