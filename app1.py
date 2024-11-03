@@ -6,6 +6,7 @@ import requests_cache
 from retry_requests import retry
 import openmeteo_requests
 from datetime import datetime, timedelta
+import base64
 
 # Configurações iniciais do Streamlit
 st.set_page_config(
@@ -14,10 +15,65 @@ st.set_page_config(
     layout="wide"
 )
 
+# Chaves de API (substitua pelas suas próprias)
+EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
+EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
+
 # Configuração de cache e sessões de requisições com retry
 cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
 retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
 openmeteo = openmeteo_requests.Client(session=retry_session)
+
+# Função para obter token de acesso da Embrapa
+def obter_token_acesso_embrapa(consumer_key, consumer_secret):
+    token_url = 'https://api.cnptia.embrapa.br/token'
+    credentials = f"{consumer_key}:{consumer_secret}"
+    encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+
+    headers = {
+        'Authorization': f'Basic {encoded_credentials}',
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+    data = {'grant_type': 'client_credentials'}
+    response = requests.post(token_url, headers=headers, data=data)
+
+    if response.status_code == 200:
+        token_info = response.json()
+        return token_info['access_token']
+    else:
+        st.error(f"Erro ao obter token da Embrapa: {response.status_code}")
+        return None
+
+# Função para obter NDVI e EVI da Embrapa
+def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi', satelite='comb'):
+    access_token = obter_token_acesso_embrapa(EMBRAPA_CONSUMER_KEY, EMBRAPA_CONSUMER_SECRET)
+    if not access_token:
+        return None
+
+    url = 'https://api.cnptia.embrapa.br/satveg/v2/series'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+    payload = {
+        "tipoPerfil": tipo_indice,
+        "satelite": satelite,
+        "latitude": latitude,
+        "longitude": longitude,
+        "dataInicial": data_inicial.strftime('%Y-%m-%d'),
+        "dataFinal": data_final.strftime('%Y-%m-%d')
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        data = response.json()
+        series = pd.DataFrame({
+            'Data': pd.to_datetime(data['listaDatas']),
+            tipo_indice.upper(): data['listaSerie']
+        })
+        return series
+    else:
+        st.error(f"Erro ao obter NDVI/EVI: {response.status_code}")
+        return None
 
 # Função para obter dados meteorológicos usando Open-Meteo API com cache
 def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
@@ -157,14 +213,22 @@ def main():
         data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=14))
         data_final = st.date_input("Data Final", datetime.now())
 
-        if st.button("Obter Dados Meteorológicos"):
+        if st.button("Obter Dados Meteorológicos e Índices de Vegetação"):
             hourly_df, daily_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
+            ndvi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi')
+            evi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='evi')
             
             st.write("### Dados Meteorológicos Horários")
             st.write(hourly_df)
             
             st.write("### Dados Meteorológicos Diários")
             st.write(daily_df)
+            
+            st.write("### Índice NDVI")
+            st.write(ndvi_df)
+            
+            st.write("### Índice EVI")
+            st.write(evi_df)
 
 if __name__ == '__main__':
     main()
