@@ -121,52 +121,33 @@ def inicializar_grade(tamanho, inicio_fogo):
     grade[inicio_fogo] = QUEIMANDO1
     return grade
 
-# Cálculo de probabilidade de propagação com novos parâmetros
-def calcular_probabilidade_propagacao(params):
-    fatores = {
-        "temp": (params['temperatura'] - 20) / 30,
-        "umidade": (100 - params['umidade']) / 100,
-        "vento_10m": params['vento_10m'] / 50,
-        "vento_100m": params['vento_100m'] / 50,
-        "ndvi": params['ndvi'],
-        "evi": params['evi'],
-        "chuva": (50 - params['chuva']) / 50,
-        "nuvens": (100 - params['nuvens']) / 100
-    }
-    prob_base = 0.3
-    prob = prob_base + 0.1 * sum(fatores.values())
-    return min(max(prob, 0), 1)
+# Função para exibir gráficos de histogramas e margem de erro
+def plotar_histogramas_e_margem_erro(simulacao):
+    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
 
-def aplicar_regras_fogo(grade, params, ruido):
-    nova_grade = grade.copy()
-    tamanho = grade.shape[0]
-    prob_propagacao = calcular_probabilidade_propagacao(params)
+    st.sidebar.write("### Histograma de Células Queimando")
+    fig, ax = plt.subplots()
+    ax.hist(contagem_queimando, bins=20, color='orange')
+    ax.set_title("Histograma de Células Queimando")
+    ax.set_xlabel("Número de Células Queimando")
+    ax.set_ylabel("Frequência")
+    st.sidebar.pyplot(fig)
 
-    for i in range(1, tamanho - 1):
-        for j in range(1, tamanho - 1):
-            if grade[i, j] == QUEIMANDO1:
-                nova_grade[i, j] = QUEIMANDO2
-            elif grade[i, j] == QUEIMANDO2:
-                nova_grade[i, j] = QUEIMANDO3
-            elif grade[i, j] == QUEIMANDO3:
-                nova_grade[i, j] = QUEIMANDO4
-            elif grade[i, j] == QUEIMANDO4:
-                nova_grade[i, j] = QUEIMADO
-                vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
-                for ni, nj in vizinhos:
-                    if grade[ni, nj] == VIVO and np.random.rand() < prob_propagacao * (1 + ruido / 50.0):
-                        nova_grade[ni, nj] = QUEIMANDO1
-    return nova_grade
+    # Gráfico de média e margem de erro
+    st.sidebar.write("### Média e Margem de Erro")
+    media_movel = pd.Series(contagem_queimando).rolling(window=5).mean()
+    std_movel = pd.Series(contagem_queimando).rolling(window=5).std()
 
-def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido):
-    grade = inicializar_grade(tamanho, inicio_fogo)
-    grades = [grade.copy()]
-    for _ in range(passos):
-        grade = aplicar_regras_fogo(grade, params, ruido)
-        grades.append(grade.copy())
-    return grades
+    fig, ax = plt.subplots()
+    ax.plot(media_movel, label='Média', color='blue')
+    ax.fill_between(media_movel.index, media_movel - std_movel, media_movel + std_movel, color='blue', alpha=0.2)
+    ax.set_title("Média e Margem de Erro")
+    ax.set_xlabel("Passos da Simulação")
+    ax.set_ylabel("Número de Células Queimando")
+    ax.legend()
+    st.sidebar.pyplot(fig)
 
-# Função para plotar a simulação
+# Função para plotar a simulação de incêndio
 def plotar_simulacao(grades):
     fig, axes = plt.subplots(5, 10, figsize=(20, 10))
     axes = axes.flatten()
@@ -204,6 +185,13 @@ def main():
         evi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='evi')
         
         if hourly_df is not None and ndvi_df is not None and evi_df is not None:
+            st.write("### Dados Meteorológicos (Open-Meteo)")
+            st.dataframe(hourly_df)
+            st.write("### NDVI (Embrapa)")
+            st.dataframe(ndvi_df)
+            st.write("### EVI (Embrapa)")
+            st.dataframe(evi_df)
+
             params = {
                 'temperatura': hourly_df['Temperatura_2m'].mean(),
                 'umidade': hourly_df['Umidade_Relativa_2m'].mean(),
@@ -224,6 +212,7 @@ def main():
             if st.button("Executar Simulação de Incêndio"):
                 simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, params, ruido)
                 plotar_simulacao(simulacao)
+                plotar_histogramas_e_margem_erro(simulacao)
 
 if __name__ == '__main__':
     main()
