@@ -54,70 +54,66 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
     # Processamento de dados horários
     hourly = response.Hourly()
     hourly_data = {
-        "date": pd.date_range(
+        "Data": pd.date_range(
             start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
             end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
             freq=pd.Timedelta(seconds=hourly.Interval()),
             inclusive="left"
-        )
+        ),
+        "Temperatura_2m": hourly.Variables(0).ValuesAsNumpy(),
+        "Umidade_Relativa_2m": hourly.Variables(1).ValuesAsNumpy(),
+        "Temperatura_Aparente": hourly.Variables(2).ValuesAsNumpy(),
+        "Pressao_Superficie": hourly.Variables(3).ValuesAsNumpy(),
+        "Cobertura_Nuvens": hourly.Variables(4).ValuesAsNumpy(),
+        "Cobertura_Nuvens_Baixa": hourly.Variables(5).ValuesAsNumpy(),
+        "Cobertura_Nuvens_Media": hourly.Variables(6).ValuesAsNumpy(),
+        "Cobertura_Nuvens_Alta": hourly.Variables(7).ValuesAsNumpy(),
+        "Evapotranspiracao_ET0_FAO": hourly.Variables(8).ValuesAsNumpy(),
+        "Deficit_Pressao_Vapor": hourly.Variables(9).ValuesAsNumpy(),
+        "Velocidade_Vento_10m": hourly.Variables(10).ValuesAsNumpy(),
+        "Velocidade_Vento_100m": hourly.Variables(11).ValuesAsNumpy(),
+        "Direcao_Vento_10m": hourly.Variables(12).ValuesAsNumpy(),
+        "Direcao_Vento_100m": hourly.Variables(13).ValuesAsNumpy(),
+        "Rajadas_Vento_10m": hourly.Variables(14).ValuesAsNumpy(),
+        "Temperatura_Solo_0_7cm": hourly.Variables(15).ValuesAsNumpy(),
+        "Temperatura_Solo_7_28cm": hourly.Variables(16).ValuesAsNumpy(),
+        "Temperatura_Solo_28_100cm": hourly.Variables(17).ValuesAsNumpy(),
+        "Temperatura_Solo_100_255cm": hourly.Variables(18).ValuesAsNumpy(),
+        "Umidade_Solo_0_7cm": hourly.Variables(19).ValuesAsNumpy(),
+        "Umidade_Solo_7_28cm": hourly.Variables(20).ValuesAsNumpy(),
+        "Umidade_Solo_28_100cm": hourly.Variables(21).ValuesAsNumpy(),
+        "Umidade_Solo_100_255cm": hourly.Variables(22).ValuesAsNumpy()
     }
-    hourly_data.update({
-        "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
-        "relative_humidity_2m": hourly.Variables(1).ValuesAsNumpy(),
-        "apparent_temperature": hourly.Variables(2).ValuesAsNumpy(),
-        "surface_pressure": hourly.Variables(3).ValuesAsNumpy(),
-        "cloud_cover": hourly.Variables(4).ValuesAsNumpy(),
-        "cloud_cover_low": hourly.Variables(5).ValuesAsNumpy(),
-        "cloud_cover_mid": hourly.Variables(6).ValuesAsNumpy(),
-        "cloud_cover_high": hourly.Variables(7).ValuesAsNumpy(),
-        "et0_fao_evapotranspiration": hourly.Variables(8).ValuesAsNumpy(),
-        "vapour_pressure_deficit": hourly.Variables(9).ValuesAsNumpy(),
-        "wind_speed_10m": hourly.Variables(10).ValuesAsNumpy(),
-        "wind_speed_100m": hourly.Variables(11).ValuesAsNumpy(),
-        "wind_direction_10m": hourly.Variables(12).ValuesAsNumpy(),
-        "wind_direction_100m": hourly.Variables(13).ValuesAsNumpy(),
-        "wind_gusts_10m": hourly.Variables(14).ValuesAsNumpy(),
-        "soil_temperature_0_to_7cm": hourly.Variables(15).ValuesAsNumpy(),
-        "soil_temperature_7_to_28cm": hourly.Variables(16).ValuesAsNumpy(),
-        "soil_temperature_28_to_100cm": hourly.Variables(17).ValuesAsNumpy(),
-        "soil_temperature_100_to_255cm": hourly.Variables(18).ValuesAsNumpy(),
-        "soil_moisture_0_to_7cm": hourly.Variables(19).ValuesAsNumpy(),
-        "soil_moisture_7_to_28cm": hourly.Variables(20).ValuesAsNumpy(),
-        "soil_moisture_28_to_100cm": hourly.Variables(21).ValuesAsNumpy(),
-        "soil_moisture_100_to_255cm": hourly.Variables(22).ValuesAsNumpy()
-    })
     hourly_df = pd.DataFrame(hourly_data)
 
     # Processamento de dados diários
     daily = response.Daily()
     daily_data = {
-        "date": pd.date_range(
+        "Data": pd.date_range(
             start=pd.to_datetime(daily.Time(), unit="s", utc=True),
             end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),
             freq=pd.Timedelta(seconds=daily.Interval()),
             inclusive="left"
-        )
+        ),
+        "Temperatura_Maxima_2m": daily.Variables(0).ValuesAsNumpy(),
+        "Temperatura_Minima_2m": daily.Variables(1).ValuesAsNumpy(),
+        "Temperatura_Media_2m": daily.Variables(2).ValuesAsNumpy(),
+        "Temperatura_Aparente_Maxima": daily.Variables(3).ValuesAsNumpy(),
+        "Temperatura_Aparente_Minima": daily.Variables(4).ValuesAsNumpy(),
+        "Temperatura_Aparente_Media": daily.Variables(5).ValuesAsNumpy(),
+        "Nascer_do_Sol": daily.Variables(6).ValuesAsNumpy(),
+        "Por_do_Sol": daily.Variables(7).ValuesAsNumpy(),
+        "Duracao_do_Dia": daily.Variables(8).ValuesAsNumpy(),
+        "Duracao_do_Sol": daily.Variables(9).ValuesAsNumpy(),
+        "Precipitacao_Total": daily.Variables(10).ValuesAsNumpy(),
+        "Chuva_Total": daily.Variables(11).ValuesAsNumpy(),
+        "Horas_de_Precipitacao": daily.Variables(12).ValuesAsNumpy(),
+        "Velocidade_Maxima_Vento_10m": daily.Variables(13).ValuesAsNumpy(),
+        "Rajadas_Maximas_Vento_10m": daily.Variables(14).ValuesAsNumpy(),
+        "Direcao_Dominante_Vento_10m": daily.Variables(15).ValuesAsNumpy(),
+        "Radiacao_Curta_Total": daily.Variables(16).ValuesAsNumpy(),
+        "Evapotranspiracao_Total": daily.Variables(17).ValuesAsNumpy()
     }
-    daily_data.update({
-        "temperature_2m_max": daily.Variables(0).ValuesAsNumpy(),
-        "temperature_2m_min": daily.Variables(1).ValuesAsNumpy(),
-        "temperature_2m_mean": daily.Variables(2).ValuesAsNumpy(),
-        "apparent_temperature_max": daily.Variables(3).ValuesAsNumpy(),
-        "apparent_temperature_min": daily.Variables(4).ValuesAsNumpy(),
-        "apparent_temperature_mean": daily.Variables(5).ValuesAsNumpy(),
-        "sunrise": daily.Variables(6).ValuesAsNumpy(),
-        "sunset": daily.Variables(7).ValuesAsNumpy(),
-        "daylight_duration": daily.Variables(8).ValuesAsNumpy(),
-        "sunshine_duration": daily.Variables(9).ValuesAsNumpy(),
-        "precipitation_sum": daily.Variables(10).ValuesAsNumpy(),
-        "rain_sum": daily.Variables(11).ValuesAsNumpy(),
-        "precipitation_hours": daily.Variables(12).ValuesAsNumpy(),
-        "wind_speed_10m_max": daily.Variables(13).ValuesAsNumpy(),
-        "wind_gusts_10m_max": daily.Variables(14).ValuesAsNumpy(),
-        "wind_direction_10m_dominant": daily.Variables(15).ValuesAsNumpy(),
-        "shortwave_radiation_sum": daily.Variables(16).ValuesAsNumpy(),
-        "et0_fao_evapotranspiration": daily.Variables(17).ValuesAsNumpy()
-    })
     daily_df = pd.DataFrame(daily_data)
     
     return hourly_df, daily_df
