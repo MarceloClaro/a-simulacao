@@ -10,6 +10,7 @@ import base64
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from fpdf import FPDF
+import seaborn as sns  # Importando seaborn para visualização
 
 # Chaves de API da Embrapa
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
@@ -226,6 +227,21 @@ def plotar_simulacao(grades, direcao_vento):
     plt.tight_layout()
     st.pyplot(fig)
 
+# Função para plotar a matriz de correlação
+def plotar_correlacao(params):
+    # Convertendo os parâmetros em um DataFrame
+    df_params = pd.DataFrame([params])
+    
+    # Calculando a matriz de correlação
+    correlacao = df_params.corr()
+
+    # Plotando a matriz de correlação
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(correlacao, annot=True, cmap='coolwarm', fmt='.2f', linewidths=.5)
+    plt.title("Matriz de Correlação entre Parâmetros")
+    plt.tight_layout()
+    st.pyplot(plt)
+
 # Interface do usuário
 def main():
     st.set_page_config(page_title="EcoSim.ai - Simulador de Propagação de Incêndio", page_icon="🔥")
@@ -272,6 +288,9 @@ def main():
                 'umidade_solo_0_7': hourly_df['Umidade_Solo_0_7cm'].mean(),
                 'umidade_solo_7_28': hourly_df['Umidade_Solo_7_28cm'].mean(),
             }
+
+            # Adicionando a chamada para plotar a correlação
+            plotar_correlacao(params)
 
             st.write("### Configurações da Simulação")
             tamanho_grade = st.slider("Tamanho da Grade", 10, 100, 50)
