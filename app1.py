@@ -1,38 +1,35 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 import requests
 import requests_cache
 from retry_requests import retry
+import openmeteo_requests
 from datetime import datetime, timedelta
 import base64
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
-# Configurações iniciais do Streamlit
-st.set_page_config(
-    page_title="Simulador de Propagação de Incêndio",
-    page_icon="🔥",
-    layout="wide"
-)
+# Configurações do Streamlit
+st.set_page_config(page_title="Simulador de Propagação de Incêndio", page_icon="🔥", layout="wide")
 
-# Chaves de API (substitua pelas suas próprias)
+# Chaves de API da Embrapa
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
 EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
+
+# Configuração de cache e sessão de requisições com retry
+cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+openmeteo = openmeteo_requests.Client(session=retry_session)
 
 # Função para obter token de acesso da Embrapa
 def obter_token_acesso_embrapa(consumer_key, consumer_secret):
     token_url = 'https://api.cnptia.embrapa.br/token'
     credentials = f"{consumer_key}:{consumer_secret}"
     encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
-
-    headers = {
-        'Authorization': f'Basic {encoded_credentials}',
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
+    headers = {'Authorization': f'Basic {encoded_credentials}', 'Content-Type': 'application/x-www-form-urlencoded'}
     data = {'grant_type': 'client_credentials'}
     response = requests.post(token_url, headers=headers, data=data)
-
     if response.status_code == 200:
         token_info = response.json()
         return token_info['access_token']
@@ -41,18 +38,15 @@ def obter_token_acesso_embrapa(consumer_key, consumer_secret):
         return None
 
 # Função para obter NDVI e EVI da Embrapa
-def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi'):
+def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi', satelite='comb'):
     access_token = obter_token_acesso_embrapa(EMBRAPA_CONSUMER_KEY, EMBRAPA_CONSUMER_SECRET)
     if not access_token:
         return None
-
     url = 'https://api.cnptia.embrapa.br/satveg/v2/series'
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json'
-    }
+    headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
     payload = {
         "tipoPerfil": tipo_indice,
+        "satelite": satelite,
         "latitude": latitude,
         "longitude": longitude,
         "dataInicial": data_inicial.strftime('%Y-%m-%d'),
@@ -61,16 +55,13 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_i
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code == 200:
         data = response.json()
-        series = pd.DataFrame({
-            'Data': pd.to_datetime(data['listaDatas']),
-            tipo_indice.upper(): data['listaSerie']
-        })
+        series = pd.DataFrame({'Data': pd.to_datetime(data['listaDatas']), tipo_indice.upper(): data['listaSerie']})
         return series
     else:
-        st.error(f"Erro ao obter NDVI/EVI: {response.status_code}")
+        st.error(f"Erro ao obter NDVI/EVI: {response.status_code} - Detalhes: {response.text}")
         return None
 
-# Função para obter dados meteorológicos usando Open-Meteo API
+# Função para obter dados meteorológicos usando Open-Meteo API com cache
 def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
@@ -78,95 +69,152 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
         "longitude": longitude,
         "start_date": data_inicial.strftime('%Y-%m-%d'),
         "end_date": data_final.strftime('%Y-%m-%d'),
-        "hourly": ["temperature_2m", "relative_humidity_2m", "wind_speed_10m", "wind_direction_10m"]
+        "hourly": [
+            "temperature_2m", "relative_humidity_2m", "wind_speed_10m", "wind_speed_100m",
+            "soil_temperature_0_to_7cm", "soil_temperature_7_to_28cm", "soil_moisture_0_to_7cm",
+            "soil_moisture_7_to_28cm", "cloud_cover", "precipitation"
+        ]
     }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        return pd.DataFrame(data['hourly'])
-    else:
-        st.error(f"Erro ao obter dados meteorológicos: {response.status_code}")
-        return None
+    responses = openmeteo.weather_api(url, params=params)
+    response = responses[0]
 
-# Função para calcular probabilidade de propagação com base nos dados
+    # Processamento dos dados horários
+    hourly = response.Hourly()
+    hourly_data = {
+        "Data": pd.date_range(
+            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        ),
+        "Temperatura_2m": hourly.Variables(0).ValuesAsNumpy(),
+        "Umidade_Relativa_2m": hourly.Variables(1).ValuesAsNumpy(),
+        "Velocidade_Vento_10m": hourly.Variables(2).ValuesAsNumpy(),
+        "Velocidade_Vento_100m": hourly.Variables(3).ValuesAsNumpy(),
+        "Temperatura_Solo_0_7cm": hourly.Variables(4).ValuesAsNumpy(),
+        "Temperatura_Solo_7_28cm": hourly.Variables(5).ValuesAsNumpy(),
+        "Umidade_Solo_0_7cm": hourly.Variables(6).ValuesAsNumpy(),
+        "Umidade_Solo_7_28cm": hourly.Variables(7).ValuesAsNumpy(),
+        "Cobertura_Nuvens": hourly.Variables(8).ValuesAsNumpy(),
+        "Precipitacao": hourly.Variables(9).ValuesAsNumpy()
+    }
+    hourly_df = pd.DataFrame(hourly_data)
+    return hourly_df
+
+# Função para simulação de propagação de incêndio usando autômatos celulares
+VIVO, QUEIMANDO1, QUEIMANDO2, QUEIMANDO3, QUEIMANDO4, QUEIMADO = 0, 1, 2, 3, 4, 5
+
+def inicializar_grade(tamanho, inicio_fogo):
+    grade = np.zeros((tamanho, tamanho), dtype=int)
+    grade[inicio_fogo] = QUEIMANDO1
+    return grade
+
+# Cálculo de probabilidade de propagação com novos parâmetros
 def calcular_probabilidade_propagacao(params):
-    probabilidade_base = 0.3
-    fator_ndvi = params['ndvi'] * 0.3
-    fator_evi = (1 - params['evi']) * 0.2
-    fator_umidade = (100 - params['umidade']) / 100 * 0.2
-    fator_temperatura = (params['temperatura'] - 20) / 30 * 0.2
-    fator_vento = params['velocidade_vento'] / 50 * 0.3
-    probabilidade = probabilidade_base + fator_ndvi + fator_evi + fator_umidade + fator_temperatura + fator_vento
-    return min(max(probabilidade, 0), 1)
+    fatores = {
+        "temp": (params['temperatura'] - 20) / 30,
+        "umidade": (100 - params['umidade']) / 100,
+        "vento_10m": params['vento_10m'] / 50,
+        "vento_100m": params['vento_100m'] / 50,
+        "ndvi": params['ndvi'],
+        "evi": params['evi'],
+        "chuva": (50 - params['chuva']) / 50,
+        "nuvens": (100 - params['nuvens']) / 100
+    }
+    prob_base = 0.3
+    prob = prob_base + 0.1 * sum(fatores.values())
+    return min(max(prob, 0), 1)
 
-# Função para aplicar regras de propagação de incêndio
-def aplicar_regras_fogo(grade, params):
+def aplicar_regras_fogo(grade, params, ruido):
     nova_grade = grade.copy()
     tamanho = grade.shape[0]
     prob_propagacao = calcular_probabilidade_propagacao(params)
 
     for i in range(1, tamanho - 1):
         for j in range(1, tamanho - 1):
-            if grade[i, j] == 1:
-                nova_grade[i, j] = 2
+            if grade[i, j] == QUEIMANDO1:
+                nova_grade[i, j] = QUEIMANDO2
+            elif grade[i, j] == QUEIMANDO2:
+                nova_grade[i, j] = QUEIMANDO3
+            elif grade[i, j] == QUEIMANDO3:
+                nova_grade[i, j] = QUEIMANDO4
+            elif grade[i, j] == QUEIMANDO4:
+                nova_grade[i, j] = QUEIMADO
+                # Propaga o fogo para células adjacentes
                 vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
                 for ni, nj in vizinhos:
-                    if grade[ni, nj] == 0 and np.random.rand() < prob_propagacao:
-                        nova_grade[ni, nj] = 1
+                    if grade[ni, nj] == VIVO and np.random.rand() < prob_propagacao * (1 + ruido / 50.0):
+                        nova_grade[ni, nj] = QUEIMANDO1
     return nova_grade
 
-# Função principal para configurar parâmetros e executar simulação
+def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido):
+    grade = inicializar_grade(tamanho, inicio_fogo)
+    grades = [grade.copy()]
+
+    for _ in range(passos):
+        grade = aplicar_regras_fogo(grade, params, ruido)
+        grades.append(grade.copy())
+
+    return grades
+
+# Plotando simulação em grades
+def plotar_simulacao(grades):
+    fig, axes = plt.subplots(5, 10, figsize=(20, 10))
+    axes = axes.flatten()
+    cmap = ListedColormap(['green', 'yellow', 'orange', 'red', 'darkred', 'black'])
+
+    for i, grade in enumerate(grades[::max(1, len(grades)//50)]):
+        if i >= len(axes):
+            break
+        ax = axes[i]
+        ax.imshow(grade, cmap=cmap, interpolation='nearest')
+        ax.set_title(f'Passo {i}')
+        ax.grid(False)
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
+# Interface do usuário
 def main():
     st.title("Simulador de Propagação de Incêndio")
+    endereco = st.text_input("Digite a localização (ex.: cidade, endereço):")
     
-    endereco = st.text_input("Digite a localização:")
-    latitude, longitude = 0, 0  # Substituir com função para obter coordenadas
+    if st.button("Buscar Coordenadas"):
+        latitude, longitude = 0, 0  # Substitua por função real para obter coordenadas
+        st.session_state['latitude'] = latitude
+        st.session_state['longitude'] = longitude
+    
+    if 'latitude' in st.session_state and 'longitude' in st.session_state:
+        latitude, longitude = st.session_state['latitude'], st.session_state['longitude']
+        data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
+        data_final = st.date_input("Data Final", datetime.now())
 
-    data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
-    data_final = st.date_input("Data Final", datetime.now())
-    
-    if st.button("Obter Dados"):
-        dados_meteo = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
-        dados_ndvi = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi')
-        dados_evi = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='evi')
+        # Obter dados meteorológicos e índices de vegetação
+        hourly_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
+        ndvi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi')
+        evi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='evi')
         
-        if dados_meteo is not None and dados_ndvi is not None and dados_evi is not None:
+        if not hourly_df.empty and not ndvi_df.empty and not evi_df.empty:
             params = {
-                'temperatura': dados_meteo['temperature_2m'].mean(),
-                'umidade': dados_meteo['relative_humidity_2m'].mean(),
-                'velocidade_vento': dados_meteo['wind_speed_10m'].mean(),
-                'direcao_vento': dados_meteo['wind_direction_10m'].mean(),
-                'ndvi': dados_ndvi['NDVI'].mean(),
-                'evi': dados_evi['EVI'].mean(),
-                'intensidade_fogo': st.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
-                'intervencao_humana': st.slider('Intervenção Humana (0-1)', 0.0, 1.0, 0.2),
-                'ruido': st.slider('Ruído (%)', 1, 100, 10)
+                'temperatura': hourly_df['Temperatura_2m'].mean(),
+                'umidade': hourly_df['Umidade_Relativa_2m'].mean(),
+                'vento_10m': hourly_df['Velocidade_Vento_10m'].mean(),
+                'vento_100m': hourly_df['Velocidade_Vento_100m'].mean(),
+                'ndvi': ndvi_df['NDVI'].mean(),
+                'evi': evi_df['EVI'].mean(),
+                'chuva': hourly_df['Precipitacao'].sum(),
+                'nuvens': hourly_df['Cobertura_Nuvens'].mean()
             }
 
-            tamanho_grade = st.slider("Tamanho da grade", 10, 100, 50)
-            passos = st.slider("Número de passos", 10, 200, 100)
+            st.write("### Configurações da Simulação")
+            tamanho_grade = st.slider("Tamanho da Grade", 10, 100, 50)
+            passos = st.slider("Número de Passos da Simulação", 10, 200, 100)
             inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
-            
-            grade = np.zeros((tamanho_grade, tamanho_grade), dtype=int)
-            grade[inicio_fogo] = 1
-            simulacao = [grade]
-            
-            for _ in range(passos):
-                grade = aplicar_regras_fogo(grade, params)
-                simulacao.append(grade.copy())
-            
-            cmap = ListedColormap(['green', 'red', 'black'])
-            fig, axes = plt.subplots(5, 10, figsize=(20, 10))
-            axes = axes.flatten()
-            
-            for i, grade in enumerate(simulacao[::max(1, len(simulacao)//50)]):
-                if i >= len(axes):
-                    break
-                axes[i].imshow(grade, cmap=cmap, interpolation='nearest')
-                axes[i].set_title(f'Passo {i}')
-            
-            plt.tight_layout()
-            st.pyplot(fig)
+            ruido = st.slider("Nível de Ruído", 1, 100, 10)
 
-if __name__ == "__main__":
+            if st.button("Executar Simulação de Incêndio"):
+                simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, params, ruido)
+                plotar_simulacao(simulacao)
+
+if __name__ == '__main__':
     main()
