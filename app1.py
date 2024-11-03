@@ -9,8 +9,6 @@ from datetime import datetime, timedelta
 import base64
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-from PIL import Image, ImageDraw
-import io
 
 # Configurações iniciais do Streamlit
 st.set_page_config(
@@ -118,22 +116,19 @@ def executar_simulacao(tamanho, passos, inicio_fogo, prob_propagacao):
         grades.append(grade.copy())
     return grades
 
-def criar_animacao_gif(grades):
-    frames = []
+def plotar_simulacao(grades):
+    num_graficos = min(10, len(grades))  # Exibir no máximo 10 gráficos
+    indices = np.linspace(0, len(grades) - 1, num_graficos, dtype=int)
+    
+    fig, axes = plt.subplots(1, num_graficos, figsize=(15, 5))
     cmap = ListedColormap(['green', 'red', 'black'])
-    for grade in grades:
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.imshow(grade, cmap=cmap, interpolation='nearest')
+    
+    for ax, idx in zip(axes, indices):
+        ax.imshow(grades[idx], cmap=cmap, interpolation='nearest')
+        ax.set_title(f'Passo {idx}')
         ax.axis('off')
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        frames.append(Image.open(buf))
-        plt.close(fig)
-    buf = io.BytesIO()
-    frames[0].save(buf, format='GIF', append_images=frames[1:], save_all=True, duration=300, loop=0)
-    buf.seek(0)
-    return buf
+    
+    st.pyplot(fig)
 
 # Interface do usuário
 def main():
@@ -175,8 +170,7 @@ def main():
 
                 if st.button("Executar Simulação de Incêndio"):
                     simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, prob_propagacao)
-                    gif_animacao = criar_animacao_gif(simulacao)
-                    st.image(gif_animacao, format="gif")
+                    plotar_simulacao(simulacao)
 
 if __name__ == '__main__':
     main()
