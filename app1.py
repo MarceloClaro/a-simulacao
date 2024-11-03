@@ -231,7 +231,12 @@ def plotar_simulacao(grades, direcao_vento):
 def plotar_correlacao(params):
     # Convertendo os parâmetros em um DataFrame
     df_params = pd.DataFrame([params])
-    
+
+    # Verificando se há valores NaN
+    if df_params.isnull().values.any():
+        st.warning("Existem valores NaN nos parâmetros. Corrigindo...")
+        df_params.fillna(0, inplace=True)  # Substitui NaN por 0, ou use df_params.fillna(df_params.mean(), inplace=True)
+
     # Calculando a matriz de correlação
     correlacao = df_params.corr()
 
@@ -241,6 +246,7 @@ def plotar_correlacao(params):
     plt.title("Matriz de Correlação entre Parâmetros")
     plt.tight_layout()
     st.pyplot(plt)
+
 
 # Interface do usuário
 def main():
