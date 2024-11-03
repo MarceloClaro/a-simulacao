@@ -4,168 +4,149 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.colors import ListedColormap
-from scipy import stats
-from sklearn.metrics import confusion_matrix
 from fpdf import FPDF
+import requests
+import requests_cache
+from retry_requests import retry
+import openmeteo_requests
+from datetime import datetime, timedelta
 import base64
 
-# Definindo estados das células
-VIVO = 0
-QUEIMANDO1 = 1
-QUEIMANDO2 = 2
-QUEIMANDO3 = 3
-QUEIMANDO4 = 4
-QUEIMADO = 5
+# Configurações iniciais do Streamlit
+st.set_page_config(
+    page_title="Simulador de Propagação de Incêndio",
+    page_icon="🔥",
+    layout="wide"
+)
 
-# Definindo probabilidades de propagação do fogo para cada estado
-probabilidades = {
-    VIVO: 0.6,
-    QUEIMANDO1: 0.8,
-    QUEIMANDO2: 0.8,
-    QUEIMANDO3: 0.8,
-    QUEIMANDO4: 0.8,
-    QUEIMADO: 0
-}
+# Funções para obter dados meteorológicos e índices de vegetação
+def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
+    url = "https://archive-api.open-meteo.com/v1/archive"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": data_inicial.strftime('%Y-%m-%d'),
+        "end_date": data_final.strftime('%Y-%m-%d'),
+        "hourly": ["temperature_2m", "relative_humidity_2m", "wind_speed_10m", "wind_direction_10m"]
+    }
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        return pd.DataFrame(response.json()['hourly'])
+    else:
+        st.error(f"Erro ao obter dados meteorológicos: {response.status_code}")
+        return None
 
-# Atribuindo valores numéricos ao tipo de vegetação
-valores_tipo_vegetacao = {
-    'pastagem': 0.4,
-    'matagal': 0.6,
-    'floresta decídua': 0.8,
-    'floresta tropical': 1.0
-}
+def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi'):
+    url = 'https://api.cnptia.embrapa.br/satveg/v2/series'
+    headers = {'Authorization': f'Bearer {token}'}
+    payload = {
+        "tipoPerfil": tipo_indice,
+        "latitude": latitude,
+        "longitude": longitude,
+        "dataInicial": data_inicial.strftime('%Y-%m-%d'),
+        "dataFinal": data_final.strftime('%Y-%m-%d')
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        data = response.json()
+        series = pd.DataFrame({
+            'Data': pd.to_datetime(data['listaDatas']),
+            tipo_indice.upper(): data['listaSerie']
+        })
+        return series
+    else:
+        st.error(f"Erro ao obter NDVI/EVI: {response.status_code}")
+        return None
 
-# Atribuindo valores numéricos ao tipo de solo
-valores_tipo_solo = {
-    'arenoso': 0.4,
-    'misto': 0.6,
-    'argiloso': 0.8
-}
-
-# Inicializando a matriz do autômato celular
-def inicializar_grade(tamanho, inicio_fogo):
-    grade = np.zeros((tamanho, tamanho), dtype=int)
-    grade[inicio_fogo] = QUEIMANDO1
-    return grade
-
-# Calculando a probabilidade de propagação com base nos parâmetros
+# Função para calcular probabilidade de propagação com base nos dados
 def calcular_probabilidade_propagacao(params):
-    prob_base = 0.3
-    fatores = [
-        (params['temperatura'] - 20) / 30,
-        (100 - params['umidade']) / 100,
-        params['velocidade_vento'] / 50,
-        params['densidade_vegetacao'] / 100,
-        (100 - params['umidade_combustivel']) / 100,
-        params['topografia'] / 45,
-        params['ndvi'],
-        params['intensidade_fogo'] / 10000,
-        valores_tipo_vegetacao[params['tipo_vegetacao']],
-        valores_tipo_solo[params['tipo_solo']]
-    ]
-    prob = prob_base + 0.1 * sum(fatores) * (1 - params['intervencao_humana'])
-    return min(max(prob, 0), 1)
+    probabilidade_base = 0.3
+    
+    # Ajustes baseados nos parâmetros
+    fator_ndvi = params['ndvi'] * 0.3  # Quanto maior o NDVI, mais combustível disponível
+    fator_evi = (1 - params['evi']) * 0.2  # Valores altos de EVI indicam vegetação úmida, dificultando propagação
+    fator_umidade = (100 - params['umidade']) / 100 * 0.2  # Menor umidade, maior chance de propagação
+    fator_temperatura = (params['temperatura'] - 20) / 30 * 0.2  # Temperaturas mais altas aumentam a propagação
+    fator_vento = params['velocidade_vento'] / 50 * 0.3  # Ventos fortes favorecem a propagação
 
-# Aplicando a regra do autômato celular
-def aplicar_regras_fogo(grade, params, ruido):
+    probabilidade = probabilidade_base + fator_ndvi + fator_evi + fator_umidade + fator_temperatura + fator_vento
+    return min(max(probabilidade, 0), 1)  # Limitar entre 0 e 1
+
+# Função para executar simulação usando autômatos celulares
+def aplicar_regras_fogo(grade, params):
     nova_grade = grade.copy()
+    tamanho = grade.shape[0]
     prob_propagacao = calcular_probabilidade_propagacao(params)
 
-    for i in range(1, grade.shape[0] - 1):
-        for j in range(1, grade.shape[1] - 1):
-            if grade[i, j] == QUEIMANDO1:
-                nova_grade[i, j] = QUEIMANDO2
-            elif grade[i, j] == QUEIMANDO2:
-                nova_grade[i, j] = QUEIMANDO3
-            elif grade[i, j] == QUEIMANDO3:
-                nova_grade[i, j] = QUEIMANDO4
-            elif grade[i, j] == QUEIMANDO4:
-                nova_grade[i, j] = QUEIMADO
+    for i in range(1, tamanho - 1):
+        for j in range(1, tamanho - 1):
+            if grade[i, j] == 1:  # Células em combustão
+                nova_grade[i, j] = 2  # Marca como queimado
                 vizinhos = [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]
                 for ni, nj in vizinhos:
-                    if grade[ni, nj] == VIVO and np.random.rand() < prob_propagacao:
-                        nova_grade[ni, nj] = QUEIMANDO1
+                    if grade[ni, nj] == 0 and np.random.rand() < prob_propagacao:
+                        nova_grade[ni, nj] = 1  # Propaga o fogo
     return nova_grade
 
-# Executando a simulação
-def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido):
-    grade = inicializar_grade(tamanho, inicio_fogo)
-    grades = [grade.copy()]
-    for _ in range(passos):
-        grade = aplicar_regras_fogo(grade, params, ruido)
-        grades.append(grade.copy())
-    return grades
-
-# Plotando a simulação em vários gráficos
-def plotar_simulacao(simulacao, inicio_fogo):
-    num_plots = min(50, len(simulacao))
-    fig, axes = plt.subplots(5, 10, figsize=(20, 10))
-    axes = axes.flatten()
-    cmap = ListedColormap(['green', 'yellow', 'orange', 'red', 'darkred', 'black'])
-
-    for i, grade in enumerate(simulacao[::max(1, len(simulacao)//num_plots)]):
-        if i >= len(axes):
-            break
-        ax = axes[i]
-        ax.imshow(grade, cmap=cmap, interpolation='nearest')
-        ax.set_title(f'Passo {i * (len(simulacao)//num_plots)}')
-        ax.grid(True)
-
-    fig.tight_layout()
-    st.pyplot(fig)
-
-# Plotando histogramas e gráficos de margem de erro
-def plotar_histogramas_e_erros(simulacao):
-    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
-    contagem_queimando_df = pd.DataFrame(contagem_queimando, columns=["Células Queimando"])
-
-    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    sns.histplot(contagem_queimando_df, x="Células Queimando", ax=ax[0], kde=True, bins=20, color='orange')
-    ax[0].set_title('Histograma de Células Queimando')
-    ax[0].set_xlabel('Número de Células Queimando')
-    ax[0].set_ylabel('Frequência')
-    
-    media_movel = contagem_queimando_df.rolling(window=10).mean()
-    std_movel = contagem_queimando_df.rolling(window=10).std()
-    ax[1].plot(media_movel, label='Média', color='blue')
-    ax[1].fill_between(std_movel.index, media_movel["Células Queimando"] - std_movel["Células Queimando"], media_movel["Células Queimando"] + std_movel["Células Queimando"], color='blue', alpha=0.2, label='Margem de Erro (1 std)')
-    ax[1].set_title('Média e Margem de Erro')
-    ax[1].set_xlabel('Passos da Simulação')
-    ax[1].set_ylabel('Número de Células Queimando')
-    ax[1].legend()
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
-# Interface principal do Streamlit
+# Função principal para configurar parâmetros e executar simulação
 def main():
     st.title("Simulador de Propagação de Incêndio")
-    st.subheader("Automação de Parâmetros Usando Autômatos Celulares")
+    
+    # Entrada para localização
+    endereco = st.text_input("Digite a localização:")
+    latitude, longitude = 0, 0  # Substituir com chamada a uma função que obtenha coordenadas
+    
+    # Período da simulação
+    data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
+    data_final = st.date_input("Data Final", datetime.now())
+    
+    # Carregar dados meteorológicos e NDVI/EVI
+    if st.button("Obter Dados"):
+        dados_meteo = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
+        dados_ndvi = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi')
+        dados_evi = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='evi')
+        
+        if dados_meteo is not None and dados_ndvi is not None and dados_evi is not None:
+            # Definindo parâmetros com base nos dados obtidos
+            params = {
+                'temperatura': dados_meteo['temperature_2m'].mean(),
+                'umidade': dados_meteo['relative_humidity_2m'].mean(),
+                'velocidade_vento': dados_meteo['wind_speed_10m'].mean(),
+                'direcao_vento': dados_meteo['wind_direction_10m'].mean(),
+                'ndvi': dados_ndvi['NDVI'].mean(),
+                'evi': dados_evi['EVI'].mean(),
+                'intensidade_fogo': st.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
+                'intervencao_humana': st.slider('Intervenção Humana (0-1)', 0.0, 1.0, 0.2),
+                'ruido': st.slider('Ruído (%)', 1, 100, 10)
+            }
 
-    params = {
-        'temperatura': st.sidebar.slider('Temperatura (°C)', 0, 50, 30),
-        'umidade': st.sidebar.slider('Umidade relativa (%)', 0, 100, 40),
-        'velocidade_vento': st.sidebar.slider('Velocidade do Vento (km/h)', 0, 100, 20),
-        'direcao_vento': st.sidebar.slider('Direção do Vento (graus)', 0, 360, 90),
-        'densidade_vegetacao': st.sidebar.slider('Densidade Vegetal (%)', 0, 100, 70),
-        'umidade_combustivel': st.sidebar.slider('Teor de umidade do combustível (%)', 0, 100, 10),
-        'topografia': st.sidebar.slider('Topografia (inclinação em graus)', 0, 45, 5),
-        'tipo_vegetacao': st.sidebar.selectbox('Tipo de vegetação', ['pastagem', 'matagal', 'floresta decídua', 'floresta tropical']),
-        'tipo_solo': st.sidebar.selectbox('Tipo de solo', ['arenoso', 'misto', 'argiloso']),
-        'ndvi': st.sidebar.slider('NDVI', 0.0, 1.0, 0.6),
-        'intensidade_fogo': st.sidebar.slider('Intensidade do Fogo (kW/m)', 0, 10000, 5000),
-        'intervencao_humana': st.sidebar.slider('Intervenção Humana (escala 0-1)', 0.0, 1.0, 0.2),
-        'ruido': st.sidebar.slider('Ruído (%)', 1, 100, 10)
-    }
-
-    tamanho_grade = st.sidebar.slider('Tamanho da grade', 10, 100, 50)
-    num_passos = st.sidebar.slider('Número de passos da simulação', 10, 200, 100)
-    inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
-
-    if st.button("Executar Simulação"):
-        simulacao = executar_simulacao(tamanho_grade, num_passos, inicio_fogo, params, params['ruido'])
-        plotar_simulacao(simulacao, inicio_fogo)
-        plotar_histogramas_e_erros(simulacao)
+            # Executa a simulação com os parâmetros ajustados
+            tamanho_grade = st.slider("Tamanho da grade", 10, 100, 50)
+            passos = st.slider("Número de passos", 10, 200, 100)
+            inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
+            
+            # Inicializa a grade e executa simulação passo a passo
+            grade = np.zeros((tamanho_grade, tamanho_grade), dtype=int)
+            grade[inicio_fogo] = 1
+            simulacao = [grade]
+            
+            for _ in range(passos):
+                grade = aplicar_regras_fogo(grade, params)
+                simulacao.append(grade.copy())
+            
+            # Exibe gráficos da simulação
+            cmap = ListedColormap(['green', 'red', 'black'])
+            fig, axes = plt.subplots(5, 10, figsize=(20, 10))
+            axes = axes.flatten()
+            
+            for i, grade in enumerate(simulacao[::max(1, len(simulacao)//50)]):
+                if i >= len(axes):
+                    break
+                axes[i].imshow(grade, cmap=cmap, interpolation='nearest')
+                axes[i].set_title(f'Passo {i}')
+            
+            plt.tight_layout()
+            st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
