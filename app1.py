@@ -101,6 +101,18 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
     hourly_df = pd.DataFrame(hourly_data)
     return hourly_df
 
+# Função para obter coordenadas de uma localidade usando Nominatim
+def obter_coordenadas_endereco(endereco):
+    url = f"https://nominatim.openstreetmap.org/search?q={requests.utils.quote(endereco)}&format=json&limit=1"
+    headers = {'User-Agent': 'SimuladorIncendio/1.0'}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200 and response.json():
+        resultado = response.json()[0]
+        return float(resultado['lat']), float(resultado['lon'])
+    else:
+        st.error("Endereço não encontrado ou fora da América do Sul.")
+        return None, None
+
 # Função para simulação de propagação de incêndio usando autômatos celulares
 VIVO, QUEIMANDO1, QUEIMANDO2, QUEIMANDO3, QUEIMANDO4, QUEIMADO = 0, 1, 2, 3, 4, 5
 
@@ -149,14 +161,12 @@ def aplicar_regras_fogo(grade, params, ruido):
 def executar_simulacao(tamanho, passos, inicio_fogo, params, ruido):
     grade = inicializar_grade(tamanho, inicio_fogo)
     grades = [grade.copy()]
-
     for _ in range(passos):
         grade = aplicar_regras_fogo(grade, params, ruido)
         grades.append(grade.copy())
-
     return grades
 
-# Plotando simulação em grades
+# Função para plotar a simulação
 def plotar_simulacao(grades):
     fig, axes = plt.subplots(5, 10, figsize=(20, 10))
     axes = axes.flatten()
@@ -183,15 +193,12 @@ def main():
         if latitude and longitude:
             st.session_state['latitude'] = latitude
             st.session_state['longitude'] = longitude
-        else:
-            st.error("Endereço inválido ou fora da América do Sul.")
 
     if 'latitude' in st.session_state and 'longitude' in st.session_state:
         latitude, longitude = st.session_state['latitude'], st.session_state['longitude']
         data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
         data_final = st.date_input("Data Final", datetime.now())
 
-        # Obter dados meteorológicos e índices de vegetação
         hourly_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
         ndvi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='ndvi')
         evi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_indice='evi')
