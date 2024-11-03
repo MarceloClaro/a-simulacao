@@ -171,7 +171,7 @@ def simular_propagacao_incendio(grade_inicial, parametros, num_passos):
 
 def criar_animacao_simulacao(grades):
     fig, ax = plt.subplots()
-    cmap = plt.colormaps.get_cmap('brg', 4)  # Ajuste da função get_cmap
+    cmap = plt.colormaps.get_cmap('brg')  # Ajuste para usar apenas 2 argumentos
     im = ax.imshow(grades[0], cmap=cmap, vmin=VIVO, vmax=RECUPERADO)
     plt.colorbar(im, ticks=range(4), label='Estado')
 
