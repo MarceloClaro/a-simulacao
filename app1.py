@@ -155,6 +155,7 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         data_ndvi = response_ndvi.json()
         df_ndvi = pd.DataFrame({
             'Data': pd.to_datetime(data_ndvi['listaDatas']),
+           
             'NDVI': data_ndvi['listaSerie']
         })
     else:
@@ -188,28 +189,31 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
 
 # Função para processar e normalizar dados
 def processar_dados(hourly_df, daily_df, ndvi_df, evi_df):
-    if hourly_df is not None and daily_df is not None and ndvi_df is not None and evi_df is not None:
-        # Unir os DataFrames usando a coluna 'Data'
-        merged_df = pd.merge(hourly_df, ndvi_df, on='Data', how='outer')
-        merged_df = pd.merge(merged_df, evi_df, on='Data', how='outer')
-        
-        # Normalização dos dados
-        scaler = MinMaxScaler()
-        columns_to_normalize = ['Temperatura_2m', 'Umidade_Relativa_2m', 'Temperatura_Aparente', 
-                                 'Chuva', 'Pressao_Superficial', 'Cobertura_Nuvens', 
-                                 'Evapotranspiracao', 'Deficit_Vapor', 'Velocidade_Vento_10m', 
-                                 'Rajadas_Vento_10m', 'Temperatura_Max', 'Temperatura_Min', 
-                                 'Precipitacao_Total', 'NDVI', 'EVI']
-        
-        # Verifica se as colunas existem no DataFrame antes de normalizar
-        for column in columns_to_normalize:
-            if column in merged_df.columns:
-                merged_df[column] = scaler.fit_transform(merged_df[[column]])
+    # Garantir que as colunas 'Data' sejam do tipo datetime
+    hourly_df['Data'] = pd.to_datetime(hourly_df['Data'])
+    daily_df['Data'] = pd.to_datetime(daily_df['Data'])
+    ndvi_df['Data'] = pd.to_datetime(ndvi_df['Data'])
+    evi_df['Data'] = pd.to_datetime(evi_df['Data'])
 
-        return merged_df
-    else:
-        st.error("Dados insuficientes para processamento.")
-        return None
+    # Merge dos DataFrames
+    merged_df = pd.merge(hourly_df, ndvi_df, on='Data', how='outer')
+    merged_df = pd.merge(merged_df, evi_df, on='Data', how='outer')
+    merged_df = pd.merge(merged_df, daily_df, on='Data', how='outer')
+
+    # Normalização dos dados (exemplo com Min-Max)
+    scaler = MinMaxScaler()
+    columns_to_normalize = ['Temperatura_2m', 'Umidade_Relativa_2m', 'Temperatura_Aparente', 
+                             'Chuva', 'Pressao_Superficial', 'Evapotranspiracao', 
+                             'Deficit_Vapor', 'Velocidade_Vento_10m', 
+                             'Velocidade_Vento_100m', 'Temperatura_Max', 
+                             'Temperatura_Min', 'Precipitacao_Total', 'NDVI', 'EVI']
+
+    # Aplicar a normalização somente nas colunas que existem no DataFrame
+    for col in columns_to_normalize:
+        if col in merged_df.columns:
+            merged_df[col] = scaler.fit_transform(merged_df[[col]])
+
+    return merged_df
 
 # Interface do usuário
 def main():
@@ -247,12 +251,10 @@ def main():
                 st.write("### Dados de EVI")
                 st.dataframe(evi_df)
 
-            # Processar e normalizar os dados
+            # Processar dados
             final_df = processar_dados(hourly_df, daily_df, ndvi_df, evi_df)
-            if final_df is not None:
-                st.write("### Dados Processados e Normalizados")
-                st.dataframe(final_df)
+            st.write("### Dados Processados e Normalizados")
+            st.dataframe(final_df)
 
 if __name__ == "__main__":
     main()
-
