@@ -155,7 +155,6 @@ def aplicar_regras_fogo(grade, params, ruido, direcao_vento):
         for j in range(1, tamanho - 1):
             if grade[i, j] == QUEIMANDO1:
                 nova_grade[i, j] = QUEIMANDO2
-            elif grade[i, j] == QUEIMANDO2:
                 nova_grade[i, j] = QUEIMANDO3
             elif grade[i, j] == QUEIMANDO3:
                 nova_grade[i, j] = QUEIMANDO4
@@ -241,7 +240,8 @@ def plotar_correlacao(params):
     # Verificando se todos os dados são válidos e não possuem NaN
     if df_params.isnull().values.any():
         st.warning("Os dados contêm valores ausentes, a matriz de correlação pode não ser representativa.")
-        return
+        # Preencher NaNs com a média das colunas
+        df_params.fillna(df_params.mean(), inplace=True)
 
     # Calculando a matriz de correlação
     correlacao = df_params.corr()
@@ -317,4 +317,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
