@@ -8,8 +8,10 @@ import base64
 from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
-# Chaves de API
+# Chaves de API (substitua pelas suas próprias)
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
 EMBRAPA_CONSUMER_SECRET = 'bxY5z5ZnwKefqPmka3MLKNb0vJMa'
 
@@ -160,6 +162,12 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         })
     else:
         df_ndvi = None
+        st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message')
+            'NDVI': data_ndvi['listaSerie']
+                                                                      
+        })
+    else:
+        df_ndvi = None
         st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
 
     # Parâmetros para a requisição de EVI
@@ -171,10 +179,10 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
         "dataInicial": data_inicial.strftime('%Y-%m-%d'),
         "dataFinal": data_final.strftime('%Y-%m-%d')
     }
-
+    
     # Requisição para obter EVI
     response_evi = requests.post(url_ndvi, headers=headers, json=payload_evi)
-
+    
     if response_evi.status_code == 200:
         data_evi = response_evi.json()
         df_evi = pd.DataFrame({
@@ -225,42 +233,91 @@ def processar_dados(hourly_df, daily_df, ndvi_df, evi_df):
 def preencher_dados_sinteticos(df):
     for column in df.columns:
         if df[column].isnull().any():  # Verifica se há NaN na coluna
-            # Gerar dados sintéticos usando média da coluna
+            # Gerar dados sintéticos usando média da coluna (ou outra lógica)
             mean_value = df[column].mean()
             df[column].fillna(mean_value, inplace=True)  # Preencher NaNs com a média
 
     return df
 
-# Função para simular a propagação de incêndio
-def simular_incendio(df):
-    # Definindo estados das células
-    VIVO = 0
-    QUEIMANDO1 = 1
-    QUEIMANDO2 = 2
-    QUEIMANDO3 = 3
-    QUEIMANDO4 = 4
-    QUEIMADO = 5
+# Definindo estados das células 
+VIVO = 0
+QUEIMANDO1 = 1
+QUEIMANDO2 = 2
+QUEIMANDO3 = 3
+QUEIMANDO4 = 4
+QUEIMADO = 5
 
-    # Definindo probabilidades de propagação do fogo para cada estado
-    probabilidades = {
+# Definindo probabilidades de propagação do fogo para cada estado
+def definir_probabilidades(df):
+    return {
         VIVO: 0.6,
-        QUEIMANDO1: 0.8,
+        QUEIMANDO1: 0.8 * df['Umidade_Relativa_2m'].mean(),  # Ajustar com dados da umidade
         QUEIMANDO2: 0.8,
         QUEIMANDO3: 0.8,
         QUEIMANDO4: 0.8,
         QUEIMADO: 0
     }
 
-    # Exemplo de como implementar a propagação (baseado em um grid 2D)
-    grid_size = 10  # Exemplo de tamanho do grid
-    grid = np.zeros((grid_size, grid_size))  # Inicializa o grid com células VIVAS
+# Inicializando a matriz do autômato celular
+def inicializar_grade(tamanho, inicio_fogo):
+    grade = np.zeros((tamanho, tamanho), dtype=int)
+    grade[inicio_fogo] = QUEIMANDO1
+    return grade
 
-    # Aqui você implementaria a lógica para mudar os estados das células
-    for step in range(10):  # Exemplo de 10 passos de simulação
-        # Implemente sua lógica de propagação do fogo aqui
-        pass  # Remova isso e adicione sua lógica
+# Calculando a probabilidade de propagação com base nos parâmetros
+def calcular_probabilidade_propagacao(params):
+    prob_base = 0.3  # Probabilidade base
+    prob = prob_base + params['temperatura'] * 0.02  # Aumenta com a temperatura
+    return min(max(prob, 0), 1)
 
-    return grid  # Retorne o grid final
+# Aplicando a regra do autômato celular
+def aplicar_regras_fogo(grade, params):
+    nova_grade = grade.copy()
+    tamanho = grade.shape[0]
+    prob_propagacao = calcular_probabilidade_propagacao(params)
+
+    for i in range(1, tamanho - 1):
+        for j in range(1, tamanho - 1):
+            if grade[i, j] == QUEIMANDO1:
+                nova_grade[i, j] = QUEIMANDO2
+            elif grade[i, j] == QUEIMANDO2:
+                nova_grade[i, j] = QUEIMANDO3
+            elif grade[i, j] == QUEIMANDO3:
+                nova_grade[i, j] = QUEIMANDO4
+            elif grade[i, j] == QUEIMANDO4:
+                nova_grade[i, j] = QUEIMADO
+                # Propaga o fogo para células adjacentes
+                for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    if grade[i + di, j + dj] == VIVO and np.random.rand() < prob_propagacao:
+                        nova_grade[i + di, j + dj] = QUEIMANDO1
+    return nova_grade
+
+# Executando a simulação
+def executar_simulacao(tamanho, passos, inicio_fogo, params):
+    grade = inicializar_grade(tamanho, inicio_fogo)
+    grades = [grade.copy()]
+
+    for _ in range(passos):
+        grade = aplicar_regras_fogo(grade, params)
+        grades.append(grade.copy())
+
+    return grades
+
+# Plotando a simulação
+def plotar_simulacao(simulacao):
+    num_plots = min(50, len(simulacao))
+    fig, axes = plt.subplots(5, 10, figsize=(20, 10))
+    axes = axes.flatten()
+    cmap = ListedColormap(['green', 'yellow', 'orange', 'red', 'darkred', 'black'])
+
+    for i, grade in enumerate(simulacao[::max(1, len(simulacao)//num_plots)]):
+        ax = axes[i]
+        ax.imshow(grade, cmap=cmap, interpolation='nearest')
+        ax.set_title(f'Passo {i * (len(simulacao)//num_plots)}')
+        ax.grid(True)
+
+    plt.tight_layout()
+    st.pyplot(fig)
 
 # Interface do usuário
 def main():
@@ -297,7 +354,6 @@ def main():
             if evi_df is not None:
                 st.write("### Dados de EVI")
                 st.dataframe(evi_df)
-
             # Processar dados
             final_df = processar_dados(hourly_df, daily_df, ndvi_df, evi_df)
             if final_df is not None:
@@ -306,10 +362,32 @@ def main():
                 st.write("### Dados Processados e Normalizados")
                 st.dataframe(final_df)
 
-                # Simular incêndio
-                grid_result = simular_incendio(final_df)
-                st.write("### Resultados da Simulação de Incêndio")
-                st.dataframe(grid_result)
+                # Parâmetros para a simulação
+                params = {
+                    'temperatura': final_df['Temperatura_2m'].mean(),
+                    'umidade': final_df['Umidade_Relativa_2m'].mean(),
+                    'velocidade_vento': final_df['Velocidade_Vento_10m'].mean(),
+                    'densidade_vegetacao': final_df['NDVI'].mean() * 100,  # Normalizando para 0-100
+                    'umidade_combustivel': final_df['Umidade_Solo_0_7cm'].mean(),
+                    'topografia': 10,  # Pode ser ajustado ou coletado de outros dados
+                    'direcao_vento': 90,  # Exemplo fixo, pode ser variável
+                    'intensidade_fogo': 10000,  # Exemplo fixo, pode ser variável
+                    'tipo_vegetacao': 'floresta tropical',  # Exemplo fixo
+                    'tipo_solo': 'argiloso',  # Exemplo fixo
+                    'intervencao_humana': 0.1  # Exemplo fixo
+                }
+
+                # Configurações da simulação
+                tamanho = 50  # Tamanho da grade
+                passos = 10  # Número de passos na simulação
+                inicio_fogo = (25, 25)  # Posição inicial do fogo
+
+                # Executar a simulação
+                simulacao = executar_simulacao(tamanho, passos, inicio_fogo, params)
+
+                # Plotar a simulação
+                st.write("### Simulação de Incêndio")
+                plotar_simulacao(simulacao)
 
 if __name__ == "__main__":
     main()
