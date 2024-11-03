@@ -4,6 +4,7 @@ import requests_cache
 import pandas as pd
 from retry_requests import retry
 import requests
+import base64
 from datetime import datetime, timedelta
 
 # Configuração do cliente da API Open-Meteo com cache e retry
@@ -104,9 +105,85 @@ def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
 
     return hourly_dataframe, daily_dataframe
 
-# Interface do usuário
+# Função para obter token de acesso da Embrapa
+def obter_token_acesso_embrapa(consumer_key, consumer_secret):
+    token_url = 'https://api.cnptia.embrapa.br/token'
+    credentials = f"{consumer_key}:{consumer_secret}"
+    encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+    headers = {'Authorization': f'Basic {encoded_credentials}', 'Content-Type': 'application/x-www-form-urlencoded'}
+    data = {'grant_type': 'client_credentials'}
+    
+    response = requests.post(token_url, headers=headers, data=data)
+    
+    if response.status_code == 200:
+        token_info = response.json()
+        return token_info['access_token']
+    else:
+        return None
+
+# Função para obter NDVI e EVI da Embrapa
+def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final):
+    access_token = obter_token_acesso_embrapa(EMBRAPA_CONSUMER_KEY, EMBRAPA_CONSUMER_SECRET)
+    
+    if not access_token:
+        return None, None
+    
+    # URL da API para NDVI
+    url_ndvi = 'https://api.cnptia.embrapa.br/satveg/v2/series'
+    
+    # Parâmetros para a requisição de NDVI
+    payload_ndvi = {
+        "tipoPerfil": "ndvi",
+        "satelite": "comb",
+        "latitude": latitude,
+        "longitude": longitude,
+        "dataInicial": data_inicial.strftime('%Y-%m-%d'),
+        "dataFinal": data_final.strftime('%Y-%m-%d')
+    }
+    
+    headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
+    
+    # Requisição para obter NDVI
+    response_ndvi = requests.post(url_ndvi, headers=headers, json=payload_ndvi)
+    
+    if response_ndvi.status_code == 200:
+        data_ndvi = response_ndvi.json()
+        df_ndvi = pd.DataFrame({
+            'Data': pd.to_datetime(data_ndvi['listaDatas']),
+            'NDVI': data_ndvi['listaSerie']
+        })
+    else:
+        df_ndvi = None
+        st.error(f"Erro ao obter NDVI: {response_ndvi.status_code} - {response_ndvi.json().get('user_message', '')}")
+
+    # Parâmetros para a requisição de EVI
+    payload_evi = {
+        "tipoPerfil": "evi",
+        "satelite": "comb",
+        "latitude": latitude,
+        "longitude": longitude,
+        "dataInicial": data_inicial.strftime('%Y-%m-%d'),
+        "dataFinal": data_final.strftime('%Y-%m-%d')
+    }
+    
+    # Requisição para obter EVI
+    response_evi = requests.post(url_ndvi, headers=headers, json=payload_evi)
+    
+    if response_evi.status_code == 200:
+        data_evi = response_evi.json()
+        df_evi = pd.DataFrame({
+            'Data': pd.to_datetime(data_evi['listaDatas']),
+            'EVI': data_evi['listaSerie']
+        })
+    else:
+        df_evi = None
+        st.error(f"Erro ao obter EVI: {response_evi.status_code} - {response_evi.json().get('user_message', '')}")
+
+    return df_ndvi, df_evi
+
+# Integrando tudo na interface do usuário
 def main():
-    st.set_page_config(page_title="Simulador de Incêndio", page_icon="🔥")  # Mover esta linha para o início
+    st.set_page_config(page_title="Simulador de Incêndio", page_icon="🔥")
 
     st.title("Simulador de Propagação de Incêndio")
     
@@ -121,7 +198,7 @@ def main():
         if latitude and longitude:
             st.session_state['latitude'] = latitude
             st.session_state['longitude'] = longitude
-            st.write(f"Coordenadas encontradas: {latitude}°N, {longitude}°E")  # Exibir as coordenadas
+            st.write(f"Coordenadas encontradas: {latitude}°N, {longitude}°E")
             
             # Obter dados meteorológicos
             hourly_df, daily_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
@@ -130,6 +207,16 @@ def main():
                 st.dataframe(hourly_df)
                 st.write("### Dados Diários")
                 st.dataframe(daily_df)
+            
+            # Obter NDVI e EVI
+            ndvi_df, evi_df = obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final)
+            if ndvi_df is not None:
+                st.write("### Dados de NDVI")
+                st.dataframe(ndvi_df)
+            if evi_df is not None:
+                st.write("### Dados de EVI")
+                st.dataframe(evi_df)
 
 if __name__ == "__main__":
     main()
+
