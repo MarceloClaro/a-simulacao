@@ -183,7 +183,7 @@ def criar_animacao_simulacao(grades):
 
     # Salvar animação em GIF
     buf = io.BytesIO()
-    ani.save(buf, format="gif")
+    ani.save(buf, writer='imagemagick', format='gif')  # Especificando o writer e o formato corretos
     buf.seek(0)
     return buf
 
