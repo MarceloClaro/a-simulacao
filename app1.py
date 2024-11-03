@@ -10,6 +10,9 @@ import base64
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from fpdf import FPDF
+from scipy import stats
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 # Chaves de API da Embrapa
 EMBRAPA_CONSUMER_KEY = '8DEyf0gKWuBsN75KRcjQIc4c03Ea'
@@ -47,7 +50,7 @@ def obter_ndvi_evi_embrapa(latitude, longitude, data_inicial, data_final, tipo_i
         "satelite": satelite,
         "latitude": latitude,
         "longitude": longitude,
-        "dataInicial": data_inicial.strftime('%Y-%m-%d'),  # Formato de data
+        "dataInicial": data_inicial.strftime('%Y-%m-%d'),
         "dataFinal": data_final.strftime('%Y-%m-%d')
     }
     response = requests.post(url, headers=headers, json=payload)
@@ -200,7 +203,7 @@ def plotar_histogramas_e_margem_erro(simulacao):
     st.sidebar.pyplot(fig)
 
 # Função para plotar a simulação de incêndio
-def plotar_simulacao(grades):
+def plotar_simulacao(grades, inicio_fogo, direcao_vento):
     fig, axes = plt.subplots(5, 10, figsize=(20, 10))
     axes = axes.flatten()
     cmap = ListedColormap(['green', 'yellow', 'orange', 'red', 'darkred', 'black'])
@@ -213,8 +216,79 @@ def plotar_simulacao(grades):
         ax.set_title(f'Passo {i}')
         ax.grid(False)
 
+        # Marcar o ponto de fogo inicial
+        if i == 0:
+            ax.plot(inicio_fogo[1], inicio_fogo[0], 'rs', markersize=5, label='Fogo Inicial')
+
+        # Adicionando seta para direção do vento
+        if i == len(axes) - 1:
+            ax.arrow(90, 90, 10 * np.cos(np.deg2rad(direcao_vento)), 10 * np.sin(np.deg2rad(direcao_vento)),
+                     head_width=2, head_length=3, fc='blue', ec='blue', label='Direção do Vento')
+            ax.text(80, 95, f'Vento {direcao_vento}°', color='blue', fontsize=12)
+
     plt.tight_layout()
     st.pyplot(fig)
+
+# Função para calcular correlações e realizar ANOVA, Q-Estatística e matriz de confusão
+def realizar_estatisticas_avancadas(simulacao, params, df_historico_manual):
+    contagem_queimando = [np.sum(grade == QUEIMANDO1) + np.sum(grade == QUEIMANDO2) + np.sum(grade == QUEIMANDO3) + np.sum(grade == QUEIMANDO4) for grade in simulacao]
+    contagem_queimando_df = pd.DataFrame(contagem_queimando, columns=["Células Queimando"])
+
+    valores_params = pd.DataFrame([{
+        'temperatura': params['temperatura'],
+        'umidade': params['umidade'],
+        'vento_10m': params['vento_10m'],
+        'vento_100m': params['vento_100m'],
+        'ndvi': params['ndvi'],
+        'evi': params['evi'],
+        'chuva': params['chuva'],
+        'nuvens': params['nuvens'],
+        'ruido': params['ruido']
+    }] * len(contagem_queimando_df))
+    
+    valores_params['Células Queimando'] = contagem_queimando_df['Células Queimando']
+
+    if not df_historico_manual.empty:
+        valores_params = pd.concat([valores_params, df_historico_manual], ignore_index=True)
+
+    correlacao_spearman = valores_params.corr(method='spearman')
+    st.write("### Matriz de Correlação (Spearman):")
+    st.write(correlacao_spearman)
+
+    tercios = np.array_split(contagem_queimando_df["Células Queimando"], 3)
+    f_val, p_val = stats.f_oneway(tercios[0], tercios[1], tercios[2])
+    st.write("### Resultado da ANOVA:")
+    st.write(f"F-valor: {f_val}, p-valor: {p_val}")
+
+    def q_exponencial(valores, q):
+        return (1 - (1 - q) * valores)**(1 / (1 - q))
+
+    q_valor = 1.5
+    valores_q_exponencial = q_exponencial(contagem_queimando_df["Células Queimando"], q_valor)
+    st.write("### Valores Q-Exponencial:")
+    st.write(valores_q_exponencial)
+
+    def q_estatistica(valores, q):
+        return np.sum((valores_q_exponencial - np.mean(valores_q_exponencial))**2) / len(valores_q_exponencial)
+
+    valores_q_estatistica = q_estatistica(contagem_queimando_df["Células Queimando"], q_valor)
+    st.write("### Valores Q-Estatística:")
+    st.write(valores_q_estatistica)
+
+    y_true = np.concatenate([grade.flatten() for grade in simulacao[:-1]])
+    y_pred = np.concatenate([grade.flatten() for grade in simulacao[1:]])
+    matriz_confusao = confusion_matrix(y_true, y_pred, labels=[VIVO, QUEIMANDO1, QUEIMANDO2, QUEIMANDO3, QUEIMANDO4, QUEIMADO])
+    st.write("### Matriz de Confusão:")
+    st.write(matriz_confusao)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(matriz_confusao, annot=True, fmt='d', cmap='Blues', xticklabels=['Vivo', 'Queimando1', 'Queimando2', 'Queimando3', 'Queimando4', 'Queimado'], yticklabels=['Vivo', 'Queimando1', 'Queimando2', 'Queimando3', 'Queimando4', 'Queimado'])
+    ax.set_xlabel('Estado Previsto')
+    ax.set_ylabel('Estado Real')
+    ax.set_title('Matriz de Confusão')
+    st.pyplot(fig)
+
+    return correlacao_spearman, f_val, p_val, valores_q_exponencial, valores_q_estatistica, matriz_confusao
 
 # Interface do usuário
 def main():
@@ -256,20 +330,21 @@ def main():
                 'ndvi': ndvi_df['NDVI'].mean(),
                 'evi': evi_df['EVI'].mean(),
                 'chuva': hourly_df['Precipitacao'].sum(),
-                'nuvens': hourly_df['Cobertura_Nuvens'].mean()
+                'nuvens': hourly_df['Cobertura_Nuvens'].mean(),
+                'ruido': st.slider("Nível de Ruído", 1, 100, 10)
             }
 
             st.write("### Configurações da Simulação")
             tamanho_grade = st.slider("Tamanho da Grade", 10, 100, 50)
             passos = st.slider("Número de Passos da Simulação", 10, 200, 100)
             inicio_fogo = (tamanho_grade // 2, tamanho_grade // 2)
-            ruido = st.slider("Nível de Ruído", 1, 100, 10)
             direcao_vento = st.slider("Direção do Vento (graus)", 0, 360, 90)
 
             if st.button("Executar Simulação de Incêndio"):
-                simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, params, ruido, direcao_vento)
-                plotar_simulacao(simulacao)
+                simulacao = executar_simulacao(tamanho_grade, passos, inicio_fogo, params, params['ruido'], direcao_vento)
+                plotar_simulacao(simulacao, inicio_fogo, direcao_vento)
                 plotar_histogramas_e_margem_erro(simulacao)
+                correlacao_spearman, f_val, p_val, valores_q_exponencial, valores_q_estatistica, matriz_confusao = realizar_estatisticas_avancadas(simulacao, params, pd.DataFrame())
 
 if __name__ == "__main__":
     main()
