@@ -1,3 +1,102 @@
+import openmeteo_requests
+import requests_cache
+import pandas as pd
+from retry_requests import retry
+import streamlit as st
+
+# Configuração do cliente da API Open-Meteo com cache e retry
+cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+openmeteo = openmeteo_requests.Client(session=retry_session)
+
+# Função para obter coordenadas de uma localidade usando Nominatim
+def obter_coordenadas_endereco(endereco):
+    url = f"https://nominatim.openstreetmap.org/search?q={requests.utils.quote(endereco)}&format=json&limit=1"
+    headers = {'User-Agent': 'SimuladorIncendio/1.0'}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200 and response.json():
+        resultado = response.json()[0]
+        return float(resultado['lat']), float(resultado['lon'])
+    else:
+        st.error("Endereço não encontrado ou fora da América do Sul.")
+        return None, None
+
+# Função para obter dados meteorológicos
+def obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final):
+    url = "https://archive-api.open-meteo.com/v1/archive"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": data_inicial.strftime('%Y-%m-%d'),
+        "end_date": data_final.strftime('%Y-%m-%d'),
+        "hourly": ["temperature_2m", "relative_humidity_2m", "wind_speed_10m", "cloud_cover", "precipitation"],
+        "daily": ["temperature_2m_max", "temperature_2m_min", "precipitation_sum"]
+    }
+    responses = openmeteo.weather_api(url, params=params)
+    response = responses[0]
+    
+    # Processar dados horários
+    hourly = response.Hourly()
+    hourly_data = {
+        "Data": pd.date_range(
+            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        ),
+        "Temperatura_2m": hourly.Variables(0).ValuesAsNumpy(),
+        "Umidade_Relativa_2m": hourly.Variables(1).ValuesAsNumpy(),
+        "Velocidade_Vento_10m": hourly.Variables(2).ValuesAsNumpy(),
+        "Cobertura_Nuvens": hourly.Variables(3).ValuesAsNumpy(),
+        "Precipitacao": hourly.Variables(4).ValuesAsNumpy()
+    }
+    hourly_dataframe = pd.DataFrame(data=hourly_data)
+    
+    # Processar dados diários
+    daily = response.Daily()
+    daily_data = {
+        "Data": pd.date_range(
+            start=pd.to_datetime(daily.Time(), unit="s", utc=True),
+            end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=daily.Interval()),
+            inclusive="left"
+        ),
+        "Temperatura_Max": daily.Variables(0).ValuesAsNumpy(),
+        "Temperatura_Min": daily.Variables(1).ValuesAsNumpy(),
+        "Precipitacao_Total": daily.Variables(2).ValuesAsNumpy()
+    }
+    daily_dataframe = pd.DataFrame(data=daily_data)
+    
+    return hourly_dataframe, daily_dataframe
+
+# Interface do usuário
+def main():
+    st.set_page_config(page_title="Simulador de Incêndio", page_icon="🔥")
+    
+    st.title("Simulador de Propagação de Incêndio")
+    
+    endereco = st.text_input("Digite a localização (ex.: cidade, endereço):")
+    
+    if st.button("Buscar Coordenadas"):
+        latitude, longitude = obter_coordenadas_endereco(endereco)
+        if latitude and longitude:
+            st.session_state['latitude'] = latitude
+            st.session_state['longitude'] = longitude
+            
+            # Inputs de data
+            data_inicial = st.date_input("Data Inicial", datetime.now() - timedelta(days=7))
+            data_final = st.date_input("Data Final", datetime.now())
+            
+            # Obter dados meteorológicos
+            hourly_df, daily_df = obter_dados_meteorologicos(latitude, longitude, data_inicial, data_final)
+            if hourly_df is not None and daily_df is not None:
+                st.write("### Dados Horários")
+                st.dataframe(hourly_df)
+                st.write("### Dados Diários")
+                st.dataframe(daily_df)
+
+if __name__ == "__main__":
+    main()
 import streamlit as st
 import numpy as np
 import pandas as pd
